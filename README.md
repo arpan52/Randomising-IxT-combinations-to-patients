@@ -20,10 +20,10 @@ To run a simulation, the user must provide the following inputs:
 - `Example_1`: Integer (1–3) — Specifies the example scenario under `Design_1`  
 - `Design_2`: Integer (1–5) — Specifies the second randomisation design  
 - `Example_2`: Integer (1–3) — Specifies the example scenario under `Design_2`  
-- `del_0`: Numeric scalar — Overall mean effect (δ₀)  
-- `del_1`: Numeric scalar — Difference between the intervention mean and overall mean (δ₁)  
-- `del_2`: Numeric vector — Patient baseline severity (δ₂)  
-- `del_3`: Numeric scalar — Patient baseline age (δ₃)  
+- `del_0`: Numeric scalar — Overall mean effect ($$\delta_0$$)  
+- `del_1`: Numeric scalar — Difference between the intervention mean and overall mean ($$\delta_1$$)  
+- `del_2`: Numeric vector — Patient baseline severity ($$\delta_2$$)   
+- `del_3`: Numeric scalar — Patient baseline age (($$\delta_3$$)   
 - `n_sim`: Integer — Number of simulations (default: `10000`)
 
 ---
@@ -42,8 +42,8 @@ Each row contains the following metrics:
 |--------|-------------|
 | Contrast Estimate | Estimated treatment contrast |
 | Standard Error    | Standard error of the contrast |
-| SD (Therapist)    | Std. deviation of therapist random effects |
-| SD (IxT Combo)    | Std. deviation of IxT interaction effects |
+| SD (Therapist)    | Std. deviation of between therapist random effects ($$\sigma_{u_1}$$)|
+| SD (IxT Combo)    | Std. deviation of IxT interaction effects or between-therapist variance in the intervention effect ($$\sigma_{v_1}$$)|
 | Type I Error      | Type I error rate |
 | Type II Error     | Type II error rate |
 | Proportion Singular | Proportion of singular model fits |
