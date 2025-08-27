@@ -1,6 +1,6 @@
 # Randomising-IxT-Combinations-to-Patients
 
-This repository contains the source R code for all simulations conducted in the paper:
+This repository contain the source R codes for all simulations conducted in the paper:
 
 **_Orthogonal factorial designs for trials of therapist-delivered interventions: Randomising intervention–therapist combinations to patients_**
 
