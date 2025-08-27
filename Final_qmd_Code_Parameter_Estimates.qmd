@@ -1,0 +1,1511 @@
+---
+title: "Code for obtaining the fixed and random effect estimates and Type-2 error"
+format: html
+editor: visual
+---
+
+## Quarto
+
+Quarto enables you to weave together content and executable code into a finished document. To learn more about Quarto see <https://quarto.org>.
+
+## Required Packages
+
+```{r}
+rm(list = ls())   # Remove all the previous variables
+
+library(tictoc)   # For timer
+library(lmerTest) # For Linear Mixed models
+library(MASS)     # For matrices
+#library(lme4) 
+library(ggplot2)  # For plotting if any
+set.seed(123)            # for reproducibility
+tic()
+
+```
+
+The following function creates a base dataset
+
+```{r}
+# Function to create the base dataset
+  create_dataset <- function(n_Patient, n_Batch = 1, n_Therapist = 1, n_Centre = 1) {
+    if ((n_Patient / n_Therapist) %% n_Batch != 0) stop("(n_Patient/n_Therapist) is not divisible by n_Batch")
+    if (n_Patient %% n_Therapist != 0) stop("n_Patient is not divisible by n_Therapist")
+    if (n_Therapist %% n_Centre != 0) stop("n_Therapist is not divisible by n_Centre")
+    
+    # Calculate the number of rows per Therapist category
+    rows_per_Therapist <- n_Patient / n_Therapist
+    
+    # Create the row IDs
+    Patient <- 1:n_Patient
+    
+    # Create the Therapist categories sequentially
+    Therapist <- rep(1:n_Therapist, each = rows_per_Therapist)
+    
+    # Calculate the number of rows per Batch category
+    rows_per_Batch <- rows_per_Therapist / n_Batch
+    
+    # Create the Batch categories
+    Batch <- rep(1:n_Batch, each = rows_per_Batch)
+    
+    # Calculate the number of rows per Centre category
+    rows_per_Centre <- n_Patient / n_Centre
+    
+    # Create the Centre categories
+    Centre <- rep(1:n_Centre, each = rows_per_Centre)
+    
+    # Combine into a data frame
+    data <- data.frame(Patient = Patient, Batch = Batch, Therapist = Therapist,
+                       Centre = Centre)
+    
+    # Make all variables factors
+    data$Batch <- factor(data$Batch)
+    data$Therapist <- factor(data$Therapist)
+    data$Centre <- factor(data$Centre)
+    
+    return(data)
+  }
+```
+
+The following function generates Interventions as a factor
+
+```{r}
+
+  # Function to generate Intervention
+  intervention_generation <- function(data, n_Int, Int_name = "Int") {
+    # copy input
+    newdata <- data
+    
+    # total rows
+    n <- nrow(newdata)
+    
+    # check divisibility
+    if (n %% n_Int != 0) {
+      stop(
+        sprintf(
+          "Error: number of rows (%d) is not divisible by n_Int = %d.",
+          n, n_Int
+        )
+      )
+    }
+    
+    # assign treatments evenly
+    newdata[[Int_name]] <- rep(seq_len(n_Int), each = n / n_Int)
+    # Convert Int to factor
+    newdata[[Int_name]] <- factor(newdata[[Int_name]])
+    
+    newdata
+  }
+```
+
+The next function randomize the patients to interventions.
+
+```{r}
+
+  
+  # Randomisation (Allocation of Therapists Before Interventions)
+  rand1_function <- function(data, n_Int, trt_factors = NULL, blocking_factors = NULL, Int_name = "Int") {
+    
+    # Split the dataset (data) into `strata' defined as combinations of the
+    # blocking_factors
+    # ensure blocking_factors are in data
+    
+    if(is.null(blocking_factors)) {
+      # Create the interventions
+      df <- intervention_generation(data=data, n_Int=n_Int, Int_name = Int_name)
+      
+      # Randomise the patients to interventions
+      # Reshuffle interventions
+      df[Int_name] <- sample(df[[Int_name]])
+      
+      return(df)
+    }
+    else{
+      blocking_factors <- as.character(blocking_factors)
+      if (!all(blocking_factors %in% names(data))) {
+        stop("All blocking_factors must be column names in 'data'")
+      }
+      
+      # build a factor out of every unique combo
+      data$stratum <- interaction(data[blocking_factors], drop = TRUE, sep = "_")
+      
+      
+      # split() splits the data by stratum and returns a list of data.frames
+      strata_dfs <- split(data, data$stratum)
+      
+      
+      # Within each `stratum', create a uniform Int factor (called Int_name) and make sure that every
+      # combination of trt_factors is combined with every Int factor level
+      
+      for (i in seq_along(strata_dfs)) {
+        # Pull out dataset from the list
+        df <- strata_dfs[[i]]
+        
+        # Create the interventions
+        df <- intervention_generation(data=df, n_Int=n_Int, Int_name = Int_name)
+        
+        # Randomise the patients to treatments
+        # Reshuffle interventions
+        df[Int_name] <- sample(df[[Int_name]])
+        
+        # Put dataset back in the list
+        strata_dfs[[i]] <- df
+      }
+      
+      # Put all of the strata back together and output the resulting dataset
+      recombined_df <- do.call(rbind, strata_dfs)
+      recombined_df$stratum <- NULL # Remove the temporary stratum column
+      
+      return(recombined_df)
+    }
+  }
+  
+```
+
+The next function generates as many clusters on the patients as the number of therapists
+
+```{r}
+
+  #Generate Cluster
+  
+  
+  cluster_generation <- function(data, n_Cluster, Cluster_name = "Cluster") {
+    # copy input
+    newdata <- data
+    # total rows
+    n <- nrow(newdata)
+    
+    
+    # check divisibility
+    if (n %% n_Cluster != 0) {
+      stop(
+        sprintf(
+          "Error: number of rows (%d) is not divisible by n_Cluster = %d.",
+          n, n_Cluster
+        )
+      )
+    }
+    
+    # assign treatments evenly
+    newdata[[Cluster_name]] <- rep(seq_len(n_Cluster), each = n / n_Cluster)
+    
+    newdata
+  }
+  
+```
+
+The next function randomizes the patients blocked and randomized by the interventions to the therapist afterwards.
+
+```{r}
+
+  
+  # Randomisation (Allocation of Therapists After Interventions)
+  
+  
+  rand2_function <- function(data, n_Cluster, trt_factors = NULL, blocking_factors = NULL, Cluster_name = "Cluster") {
+    
+    # Split the dataset (data) into `strata' defined as combinations of the          
+    # blocking_factors
+    # ensure blocking_factors are in data
+    
+    n_Cluster <- length(levels(data$Therapist))/length(levels(data$Centre))
+    
+    if(is.null(blocking_factors)) {
+      # Create the clusters
+      
+      
+      df <- cluster_generation(data=data, n_Cluster=n_Cluster, Cluster_name = 
+                                 Cluster_name)  
+      
+      # Randomise the patients to clusters
+      # Reshuffle clusters
+      df[Cluster_name] <- sample(df[[Cluster_name]])
+      
+      return(df)
+    }
+    else{
+      
+      blocking_factors <- as.character(blocking_factors)
+      if (!all(blocking_factors %in% names(data))) {
+        stop("All blocking_factors must be column names in 'data'")
+      }
+      
+      # build a factor out of every unique combo
+      data$stratum <- interaction(data[blocking_factors], drop = TRUE, sep = "_")
+      
+      
+      # split() splits the data by stratum and returns a list of data.frames
+      strata_dfs <- split(data, data$stratum)
+      
+      
+      
+      # Within each `stratum', create a uniform Int factor (called Int_name) and make         sure that every  
+      # combination of trt_factors is combined with every Int factor level
+      
+      for (i in seq_along(strata_dfs)) {
+        # Pull out dataset from the list
+        df <- strata_dfs[[i]]
+        
+        # Create the clusters
+        df <- cluster_generation(data=df, n_Cluster=n_Cluster, Cluster_name = 
+                                   Cluster_name)  
+        
+        # Randomise the patients to treatments
+        # Reshuffle clusters
+        df[Cluster_name] <- sample(df[[Cluster_name]])
+        
+        # Put dataset back in the list
+        strata_dfs[[i]] <- df
+      }
+      
+      # Put all of the strata back together and output the resulting dataset
+      recombined_df <- do.call(rbind, strata_dfs)
+      return(recombined_df)
+    }
+  }
+  
+  
+  
+```
+
+The next function generates the combinations of the therapists and interventions as treatment factors.
+
+```{r}
+ 
+  #####################################
+  # New functions 2
+  #####################################
+  
+  
+  #####################################
+  # Intervention_generation_2
+  
+  # Generates all combinations of Int = 1,2,...n_Int x Therapist = 1,2,...n_Therapist 
+  # such that all combinations appear an equal number of times within the block.
+  
+  # This function should never be called directly, it is used by "blocked_intervention_generation_2" function
+  #####################################
+  intervention_generation_2 <- function(data,
+                                        n_Int,
+                                        n_Therapist,
+                                        Int_name       = "Int",
+                                        Therapist_name = "Therapist") {
+    # Generates all combinations of Int = 1,2,...n_Int x Therapist = 1,2,...n_Therapist such that all combinations appear an equal number of times within the block.
+    
+    # Copy the input data frame so we don’t overwrite the original
+    newdata <- data
+    # Count how many rows we have
+    n <- nrow(newdata)
+    
+    # 1) Check that the total number of rows ‘n’ is exactly divisible
+    #    by (n_Int * n_Therapist).  If not, throw an error.
+    if (n %% (n_Int * n_Therapist) != 0) {
+      stop(
+        sprintf(
+          "Error: number of rows (%d) is not divisible by n_Int*n_Therapist = %d.",
+          n, (n_Int * n_Therapist)
+        )
+      )
+    }
+    
+    # 2) Compute how many times we must repeat each unique (Int, Therapist) pair:
+    #    Total rows / (n_Int * n_Therapist) = “reps”
+    reps <- n / (n_Int * n_Therapist)
+    
+    # 3) Build two integer sequences, 1..n_Int and 1..n_Therapist
+    seq_Int       <- 1:n_Int
+    seq_Therapist <- 1:n_Therapist
+    
+    # 4) Put those two sequences into a named list so that expand.grid()
+    #    will produce columns named exactly as Int_name and Therapist_name
+    seq_list <- setNames(
+      list(seq_Int, seq_Therapist),
+      c(Int_name, Therapist_name)
+    )
+    
+    # 5) Make a “base grid” of all possible (Int, Therapist) combinations.
+    #    This has exactly n_Int * n_Therapist rows.
+    int_therapist_combinations_0 <- do.call(expand.grid, seq_list)
+    
+    # 6) Now repeat each of those grid-rows exactly ‘reps’ times.
+    #    First build a vector of row indices 1..(n_Int*n_Therapist),
+    #    each repeated ‘reps’ times:
+    row_indices <- rep(seq_len(nrow(int_therapist_combinations_0)), each = reps)
+    
+    # 7) Subset the “base grid” by those repeated‐indices so that each unique
+    #    (Int, Therapist) appears ‘reps’ times in a block of consecutive rows.
+    int_therapist_combinations <- int_therapist_combinations_0[row_indices, ]
+    
+    # 8) Drop any leftover row-names on the small grid so that cbind() won’t warn
+    row.names(int_therapist_combinations) <- NULL
+    
+    # 9) Finally, column-bind the original data (‘newdata’) with the newly built
+    #    (Int, Therapist) assignments.  This yields exactly n = rows(data) rows,
+    #    with two extra columns named Int_name and Therapist_name.
+    outdata <- cbind(newdata, int_therapist_combinations)
+    return(outdata)
+  }
+  
+```
+
+The next function divided the whole baseline data structure into the blocks according to the provided blocking factor. The blocking is required because the therapist within a centre are fixed. They can not change.
+
+```{r}
+
+  
+  #####################################
+  # blocked_intervention_generation_2
+  
+  # Runs intervention_generation_2 within each block, where blocks are defined
+  # as the combinations of blocking_factors (an argument of the function)
+  # Produces a block factor to indicate what it determined the blocks to be (and for use in further functions)
+  #####################################
+  blocked_intervention_generation_2 <- function(
+    data,
+    n_Int,
+    n_Therapist,
+    Int_name        = "Int",
+    Therapist_name  = "Therapist",
+    blocking_factors = NULL
+  ) {
+    # 1) If no blocking_factors, just call intervention_generation_2() once
+    if (is.null(blocking_factors)) {
+      out_full <- intervention_generation_2(
+        data,
+        n_Int,
+        n_Therapist,
+        Int_name,
+        Therapist_name
+      )
+      return(out_full)
+    }
+    
+    # 2) Check that all blocking_factors are valid column names
+    if (!all(blocking_factors %in% names(data))) {
+      missing_cols <- setdiff(blocking_factors, names(data))
+      stop("These blocking_factors were not found: ",
+           paste(missing_cols, collapse = ", "))
+    }
+    
+    # 3) Build a temporary “.block_temp” integer for each unique combination
+    block_factor     <- interaction(data[, blocking_factors, drop = FALSE], drop = TRUE)
+    data$.block_temp <- as.integer(block_factor)
+    
+    # 4) Split into a list (one data.frame per block ID)
+    split_list <- split(data, data$.block_temp)
+    
+    # 5) For each block, drop .block_temp, call intervention_generation_2(),
+    #    then add a permanent “block” column and collect into processed_list
+    processed_list <- lapply(names(split_list), function(bname) {
+      df_blk        <- split_list[[bname]]
+      this_block_id <- unique(df_blk$.block_temp)
+      
+      # (a) remove helper column
+      df_blk$.block_temp <- NULL
+      
+      # (b) assign interventions + therapists evenly
+      out_blk <- intervention_generation_2(
+        data           = df_blk,
+        n_Int          = n_Int,
+        n_Therapist    = n_Therapist,
+        Int_name       = Int_name,
+        Therapist_name = Therapist_name
+      )
+      
+      # (c) add a “block” column
+      out_blk$block <- this_block_id
+      return(out_blk)
+    })
+    
+    # 6) Re‐combine all blocks into one data.frame
+    result <- do.call(rbind, processed_list)
+    row.names(result) <- NULL
+    #print(result)
+    return(result)
+  }
+  
+```
+
+The next function randomize the treatment combinations (Therapist x Interventions) to the patients within a block.
+
+```{r}
+
+ 
+  
+  
+  #####################################
+  # randomisation_blocked
+  
+  # Randomises the treatments (defined as the combinations of trt_factors) within
+  # blocks (defined as the combinations of blocking_factors)
+  #####################################
+  shuffle_within_block <- function(
+    data,
+    trt_factors,
+    blocking_factors = NULL
+  ) {
+    #--------------------------------------------------------
+    # 1) Validate inputs
+    #    – trt_factors: names of columns whose joint combinations 
+    #      define each “treatment” (can be length ≥1)
+    #    – blocking_factors: names of columns whose joint combinations 
+    #      define each “block” (can be NULL or length ≥1)
+    #--------------------------------------------------------
+    if (!all(trt_factors %in% names(data))) {
+      missing_trt <- setdiff(trt_factors, names(data))
+      stop("These trt_factors were not found in `data`: ",
+           paste(missing_trt, collapse = ", "))
+    }
+    if (!is.null(blocking_factors) && !all(blocking_factors %in% names(data))) {
+      missing_blk <- setdiff(blocking_factors, names(data))
+      stop("These blocking_factors were not found in `data`: ",
+           paste(missing_blk, collapse = ", "))
+    }
+    
+    #--------------------------------------------------------
+    # 2) If no blocking_factors, treat entire dataset as one block
+    #--------------------------------------------------------
+    if (is.null(blocking_factors)) {
+      split_list <- list(data)
+      names(split_list) <- "all_rows"
+    } else {
+      # Create a factor that groups rows by the unique combination of blocking_factors
+      blk_factor      <- interaction(data[ , blocking_factors, drop = FALSE], drop = TRUE)
+      data$.block_tmp <- as.integer(blk_factor)
+      split_list      <- split(data, data$.block_tmp)
+    }
+    
+    #--------------------------------------------------------
+    # 3) Within each block (or the whole data), shuffle the treatment columns
+    #--------------------------------------------------------
+    processed_list <- lapply(split_list, function(df_blk) {
+      # If we created a temporary “.block_tmp”, drop it now
+      if (".block_tmp" %in% names(df_blk)) {
+        df_blk$.block_tmp <- NULL
+      }
+      
+      # Extract just the treatment columns
+      trt_df <- df_blk[ , trt_factors, drop = FALSE]
+      
+      # Draw a random permutation of row‐indices
+      perm_ix <- sample(nrow(trt_df))
+      
+      # Reorder the treatment columns by that permutation
+      trt_df_shuffled <- trt_df[perm_ix, , drop = FALSE]
+      
+      # Overwrite the original treatment columns with the shuffled version
+      df_blk[ , trt_factors] <- trt_df_shuffled
+      
+      return(df_blk)
+    })
+    
+    #--------------------------------------------------------
+    # 4) Re‐combine all blocks (or just return the single block)
+    #--------------------------------------------------------
+    result <- do.call(rbind, processed_list)
+    row.names(result) <- NULL
+    return(result)
+  }
+  
+```
+
+The next function is the main function of the code. It takes the Design, Example, delta_0 (overall effect), delta_1 (Contrast), delta_2 (the baseline covariate measure of the patient severity) as inputs and provide the a sample of the data.
+
+```{r}
+
+
+
+Analysis_final <- function(Design,Example,del_0,del_1,del_2,del_3) {
+ 
+  
+    # Different type of Randomisation strategies for designs
+  
+  
+  
+  if(Example==1){
+    
+    #print("Completely Randomised")
+    
+    n_Patient <- 320          # Number of Patients  
+    n_Batch <- 1              # Number of Batches
+    n_Therapist <- 16         # Number of Therapists
+    n_Centre <- 1             # Number of Centres
+    
+  } else if (Example==2){
+    
+    #print("Randomised Block")
+    
+    n_Patient <- 320          # Number of Patients  
+    n_Batch <- 5              # Number of Batches
+    n_Therapist <- 16         # Number of Therapists
+    n_Centre <- 1             # Number of Centres    
+    
+  } else if (Example==3){
+    
+    #print("Multicentre Randomised Block")
+    
+    n_Patient <- 960          # Number of Patients  
+    n_Batch <- 5              # Number of Batches
+    n_Therapist <- 48         # Number of Therapists
+    n_Centre <- 6             # Number of Centres  
+    
+  }
+  
+  df <- create_dataset(n_Patient, n_Batch=n_Batch, n_Therapist=n_Therapist, 
+                       n_Centre=n_Centre)
+  
+  
+  # therapist effects for bias at the baseline before randomizing the therapists
+  therapist_effects <- del_2 + rnorm(length(levels(df$Therapist)))
+  # random patient severity ate the baseline before therapist randomisations 
+  patSeverity <- therapist_effects[df$Therapist] + rnorm(nrow(df))
+  
+  
+    
+  if (Design==1){
+    
+    if (Example==1){
+      
+      Design_num<-"Design D11 - Completely Randomised Parallel-Group Design - 
+            non-randomly assign therapists to patients after randomising interventions to patients"  
+      
+      
+      df <- intervention_generation(data=df, n_Int=2, Int_name = "Int")
+      
+      # Ensure Int is numeric for matrix operations
+      df$Int_numeric <- as.numeric(as.character(df$Int))
+      # Add a column of interactions
+      df$IT <- interaction(df$Int, df$Therapist)
+      # baseline patient Age for bias
+      patient_avAge <- del_3 + rnorm(max(df$Int_numeric)*length(levels(df$Therapist)))
+      # random patient Age  
+      patAge <- patient_avAge[df$IT] +  rnorm(n_Patient) 
+      
+      ds <- rand1_function(df, n_Int = 2, trt_factors = NULL,
+                           blocking_factors = NULL, Int_name = "Int")
+      
+      
+      
+    }
+  } 
+  if (Design==1){
+    
+    if (Example==2){
+      
+      Design_num<- "Design D12- Randomised Block [Batch] Parallel-Group Design - 
+               non-randomly assign therapists to patients after randomising interventions to patients"   
+      
+      
+      df <- intervention_generation(data=df, n_Int=2, Int_name = "Int")
+      
+      # Ensure Int is numeric for matrix operations
+      df$Int_numeric <- as.numeric(as.character(df$Int))
+      # Add a column of interactions
+      df$IT <- interaction(df$Int, df$Therapist)
+      # baseline patient Age for bias
+      patient_avAge <- del_3 + rnorm(max(df$Int_numeric)*length(levels(df$Therapist)))
+      # random patient Age  
+      patAge <- patient_avAge[df$IT] +  rnorm(n_Patient) 
+      
+      ds <- rand1_function(df, n_Int = 2, trt_factors = NULL,
+                           blocking_factors = c("Batch"), Int_name = "Int")
+      
+      
+      
+    }
+  }
+  if (Design==1){
+    
+    if (Example==3){
+      
+      Design_num<- "Design D13 - Randomised Block [Batch, Centre] Parallel-Group 
+                                Design - non-randomly assign therapists to patients after randomising interventions to patients"   
+      
+      
+      df <- intervention_generation(data=df, n_Int=2, Int_name = "Int")
+      
+      # Ensure Int is numeric for matrix operations
+      df$Int_numeric <- as.numeric(as.character(df$Int))
+      # Add a column of interactions
+      df$IT <- interaction(df$Int, df$Therapist)
+      # baseline patient Age for bias
+      patient_avAge <- del_3 + rnorm(max(df$Int_numeric)*length(levels(df$Therapist)))
+      # random patient Age  
+      patAge <- patient_avAge[df$IT] +  rnorm(n_Patient) 
+      
+      ds <- rand1_function(df, n_Int = 2, trt_factors = NULL,
+                           blocking_factors = c("Batch", "Centre"), Int_name = "Int")
+      
+      
+      
+    }
+  }  
+  
+  
+  
+  if (Design==2){
+    
+    if (Example==1){
+      
+      Design_num <- "Design D21 Completely Randomised Parallel-Group Design -  
+            non-randomly assign therapists to patients before randomising interventions to patients"
+      
+      
+      ds <- rand1_function(df, n_Int = 2, trt_factors = NULL,
+                           blocking_factors = NULL, Int_name = "Int")
+      
+    }
+  } 
+  if (Design==2){
+    
+    if (Example==2){
+      
+      Design_num<- "Design D22 - Randomised Block [Batch] Parallel-Group Design -
+            non-randomly assign therapists to patients before randomising interventions to patients"   
+      
+      ds <- rand1_function(df, n_Int = 2, trt_factors = NULL,
+                           blocking_factors = c("Batch"), Int_name = "Int")
+      
+    }
+  }
+  if (Design==2){
+    
+    if (Example==3){
+      
+      Design_num<- "Design D23 - Randomised Block [Batch, Centre] Parallel-Group  
+                        Design - non-randomly assign therapists to patients before randomising interventions to patients"   
+      
+      ds <- rand1_function(df, n_Int = 2, trt_factors = NULL,
+                           blocking_factors = c("Batch", "Centre"), Int_name = "Int")
+      
+    }
+  }
+  
+  if (Design==3){
+    
+    if (Example==1){
+      
+      Design_num<-"Design D31 - Randomised Block [Therapist] Parallel-Group Design -
+            blocking the randomisation of interventions to patients by therapists"
+      
+      ds <- rand1_function(df, n_Int = 2, trt_factors = NULL, 
+                           blocking_factors = c("Therapist"), Int_name = "Int") # Corrected: Added Int_name and closed parenthesis
+      
+    }
+  }
+  
+  if (Design==3){
+    
+    if (Example==2){
+      
+      Design_num<-"Design D32 -  Randomised Block [Therapist, Batch] Parallel-Group  
+                           Design - blocking the randomisation of interventions to patients by therapists"
+      
+      ds <- rand1_function(df, n_Int = 2, trt_factors = NULL, 
+                           blocking_factors = c("Therapist", "Batch"), Int_name = "Int") # Corrected: Added Int_name and closed parenthesis
+      
+    }
+  }
+  
+  if (Design==3){
+    
+    if (Example==3){
+      
+      Design_num<-"Design D33 -  Randomised Block [Therapist, Batch, Centre] Parallel-Group  
+                           Design - blocking the randomisation of interventions to patients by therapists"
+      
+      ds <- rand1_function(df, n_Int = 2, trt_factors = NULL, 
+                           blocking_factors = c("Therapist", "Batch", "Centre"), Int_name = "Int") # Corrected: Added Int_name and closed parenthesis
+      
+      
+      
+    }
+  } 
+  
+  if (Design==4){
+    
+    if (Example==1){
+      
+      Design_num<-"Design D41 - Completely Randomised Parallel-Group Design -  
+           randomising the combination of therapist and intervention to patients (our proposed method)"
+      
+      
+      # Generate treatments as combinations of n_Int interventions and n_Therapist therapists
+      # NOTE: The number of therapists n_Therapists is the number of therapists per centre.
+      chk_data <- blocked_intervention_generation_2(
+        data = df,
+        n_Int = 2,
+        n_Therapist = 16,   # !!! This needs to be specified as the number of therapists per centre
+        Int_name        = "Int",
+        Therapist_name  = "Therapist_wCentre",   # Have called this "..._wCentre" to indicate that we should treat the therapist IDs as "within-centre" IDs
+        blocking_factors = c("Batch", "Centre")
+      ) 
+      
+      # Randomise the treatments within block
+      chk_data_2 <- shuffle_within_block(
+        data = chk_data,
+        trt_factors = c("Int", "Therapist_wCentre"),
+        blocking_factors = c("block")
+      )
+      ds<- chk_data_2
+      # Rename Therapist_wCentre as Therapist and make it a factor again
+      ds$Therapist <- factor(ds$Therapist_wCentre)
+      
+      # --- Drop the temporary columns ---
+      ds$Therapist_wCentre <- NULL  
+      
+    }
+  } 
+  
+  if (Design==4){
+    
+    if (Example==2){
+      
+      Design_num<-"Design D42 -   Randomised Block [Batch] Parallel-Group Design  -  
+                      randomising the combination of therapist and intervention to patients (our proposed method)"
+      
+      
+      # Generate treatments as combinations of n_Int interventions and n_Therapist therapists
+      # NOTE: The number of therapists n_Therapists is the number of therapists per centre.
+      chk_data <- blocked_intervention_generation_2(
+        data = df,
+        n_Int = 2,
+        n_Therapist = 16,   # !!! This needs to be specified as the number of therapists per centre
+        Int_name        = "Int",
+        Therapist_name  = "Therapist_wCentre",   # Have called this "..._wCentre" to indicate that we should treat the therapist IDs as "within-centre" IDs
+        blocking_factors = c("Batch", "Centre")
+      ) 
+      
+      # Randomise the treatments within block
+      chk_data_2 <- shuffle_within_block(
+        data = chk_data,
+        trt_factors = c("Int", "Therapist_wCentre"),
+        blocking_factors = c("block")
+      )
+      ds<- chk_data_2
+      # Rename Therapist_wCentre as Therapist and make it a factor again
+      ds$Therapist <- factor(ds$Therapist_wCentre)
+      
+      # --- Drop the temporary columns ---
+      ds$Therapist_wCentre <- NULL
+      
+      
+    }
+  }
+  
+  
+  
+  if (Design==4){
+    
+    if (Example==3){
+      
+      Design_num<-"Design D43 -  Randomised Block [Batch, Centre] Parallel-Group Design  -  
+                      randomising the combination of therapist and intervention to patients (our proposed method) "
+      
+      
+      # Generate treatments as combinations of n_Int interventions and n_Therapist therapists
+      # NOTE: The number of therapists n_Therapists is the number of therapists per centre.
+      chk_data <- blocked_intervention_generation_2(
+        data = df,
+        n_Int = 2,
+        n_Therapist = 8,   # !!! This needs to be specified as the number of therapists per centre
+        Int_name        = "Int",
+        Therapist_name  = "Therapist_wCentre",   # Have called this "..._wCentre" to indicate that we should treat the therapist IDs as "within-centre" IDs
+        blocking_factors = c("Batch", "Centre")
+      ) 
+      
+      # Randomise the treatments within block
+      chk_data_2 <- shuffle_within_block(
+        data = chk_data,
+        trt_factors = c("Int", "Therapist_wCentre"),
+        blocking_factors = c("block")
+      )
+      
+      # as.numeric(as.character(factor_var)) is robust.
+      chk_data_2$Centre_numeric <- as.numeric(as.character(chk_data_2$Centre))
+      chk_data_2$Therapist_wCentre_numeric <- as.numeric(as.character(chk_data_2$Therapist_wCentre))
+      
+      # Define the number of therapists per centre as used in blocked_intervention_generation_2
+      n_therapist_per_centre_used <- 8
+      
+      # Calculate the unique global Therapist ID
+      # Formula: (Centre_ID - 1) * n_Therapist_per_Centre + Therapist_wCentre_ID
+      chk_data_2$Therapist_Global <- (chk_data_2$Centre_numeric - 1) * n_therapist_per_centre_used + chk_data_2$Therapist_wCentre_numeric
+      
+      chk_data_2$Therapist <- factor(chk_data_2$Therapist_Global)
+      
+      # --- Drop the temporary columns ---
+      chk_data_2 <- chk_data_2[, !(names(chk_data_2) %in% c("Centre_numeric", "Therapist_wCentre_numeric","Therapist_wCentre","block","Therapist_Global"))]
+      
+      
+      ds<- chk_data_2
+      
+      
+    }
+  }
+  
+
+  
+  if (Design==5){
+    
+    if (Example==1){
+      
+      Design_num<-"Design D51 - Completely Randomised Factorial Design - randomising interventions to patients, then randomising therapists to patients, blocking the latter by the randomised intervention"  
+      
+      df <- intervention_generation(data=df, n_Int=2, Int_name = "Int")
+      
+      # Ensure Int is numeric for matrix operations
+      df$Int_numeric <- as.numeric(as.character(df$Int))
+      # Add a column of interactions
+      df$IT <- interaction(df$Int, df$Therapist)
+      # baseline patient Age for bias
+      patient_avAge <- del_3 + rnorm(max(df$Int_numeric)*length(levels(df$Therapist)))
+      # random patient Age  
+      patAge <- patient_avAge[df$IT] +  rnorm(n_Patient) 
+      
+      ds1 <- rand1_function(df, n_Int = 2, trt_factors = NULL,
+                            blocking_factors = NULL, Int_name = "Int")
+      #View(ds1)
+
+      
+      
+      # Do second randomization of the Therapists as clusters.
+      ds <- rand2_function(ds1, n_Cluster = length(levels(ds1$Therapist)), trt_factors = NULL, blocking_factors = c("Int"), Cluster_name = "Cluster")
+      
+      # Rename Clusters as Therapist and make it a factor again
+      ds$Therapist <- factor(ds$Cluster)
+      #View(ds)   
+      # reorder the data based on the patient indices
+      ds <- ds[order(ds$Patient), ]
+     # View(ds_ordered)
+      #print(sum(ds$Therapist == 2 & ds$Int == 1))
+      
+    }
+  } 
+  if (Design==5){
+    
+    if (Example==2){
+      
+      Design_num<- "Design D52- Randomised Block Factorial Design - randomising interventions to patients, then randomising therapists to patients, blocking the latter by the randomised intervention"    
+      
+      
+      df <- intervention_generation(data=df, n_Int=2, Int_name = "Int")
+      
+      # Ensure Int is numeric for matrix operations
+      df$Int_numeric <- as.numeric(as.character(df$Int))
+      # Add a column of interactions
+      df$IT <- interaction(df$Int, df$Therapist)
+      # baseline patient Age for bias
+      patient_avAge <- del_3 + rnorm(max(df$Int_numeric)*length(levels(df$Therapist)))
+      # random patient Age  
+      patAge <- patient_avAge[df$IT] +  rnorm(n_Patient) 
+      
+      ds1 <- rand1_function(df, n_Int = 2, trt_factors = NULL,
+                            blocking_factors = c("Batch"), Int_name = "Int")
+      
+
+      
+      # Do second randomization of the Therapists as clusters.
+      
+      ds <- rand2_function(ds1, n_Cluster = length(levels(ds1$Therapist)), trt_factors = NULL, blocking_factors = c("Int", "Batch"), Cluster_name = "Cluster")
+      
+      # Rename Clusters as Therapist
+      ds$Therapist <- ds$Cluster
+      # Convert Therapist variable to a factor
+      ds$Therapist<- factor(ds$Therapist)
+      
+      # reorder the data based on the patient indices
+       ds <- ds[order(ds$Patient), ]
+      
+    }
+  }
+  if (Design==5){
+    
+    if (Example==3){
+      
+      Design_num<- "Design D53 - Multicentre Randomised Block Factorial Design - 
+            randomising interventions to patients, then randomising therapists to patients, blocking the latter by the randomised intervention"  
+      
+      
+      df <- intervention_generation(data=df, n_Int=2, Int_name = "Int")
+      
+      # Ensure Int is numeric for matrix operations
+      df$Int_numeric <- as.numeric(as.character(df$Int))
+      # Add a column of interactions
+      df$IT <- interaction(df$Int, df$Therapist)
+      # baseline patient Age for bias
+      patient_avAge <- del_3 + rnorm(max(df$Int_numeric)*length(levels(df$Therapist)))
+      # random patient Age  
+      patAge <- patient_avAge[df$IT] +  rnorm(n_Patient) 
+      
+      ds1 <- rand1_function(df, n_Int = 2, trt_factors = NULL,
+                            blocking_factors = c("Batch", "Centre"), Int_name = "Int")
+      
+      
+      ds <- rand2_function(ds1, n_Cluster = length(levels(ds1$Therapist)), trt_factors = NULL, blocking_factors = c("Int", "Batch", "Centre"), Cluster_name = "Cluster")
+      
+      # as.numeric(as.character(factor_var)) is robust.
+      ds$Centre_numeric <- as.numeric(as.character(ds$Centre))
+      ds$Therapist_Cluster_numeric <- as.numeric(as.character(ds$Cluster))
+      
+      # Define the number of therapists per centre as used in blocked_intervention_generation_2
+      n_therapist_per_centre_used <- 8
+      
+      # Calculate the unique global Therapist ID
+      # Formula: (Centre_ID - 1) * n_Therapist_per_Centre + Therapist_wCentre_ID
+      ds$Therapist_Global <- (ds$Centre_numeric - 1) * n_therapist_per_centre_used + ds$Therapist_Cluster_numeric
+      
+      ds$Therapist <- factor(ds$Therapist_Global)
+      
+      # reorder the data based on the patient indices
+      ds <- ds[order(ds$Patient), ]      
+      # --- Drop the temporary columns ---
+      ds <- ds[, !(names(ds) %in% c("Centre_numeric", "Therapist_Cluster_numeric","Cluster","Therapist_Global"))]
+      
+
+      
+      
+    }
+  }  
+  
+  
+  
+  
+
+   
+  
+  
+  
+  
+  
+  
+  ########################################################################################################
+  ####################################################
+  ####################################################
+  ########################################################################################################
+  
+  
+  samples_from_Design <- function(ds, del_0, del_1, del_2,del_3, Design,
+                                  sig_T, sig_B, sig_C,
+                                  sig_IT, sig_IB, sig_IC,
+                                  sig_TB, sig_CB,
+                                  sig_ITB, sig_ICB, sig_E, patSeverity,patAge) {
+    
+    # Ensure Int is numeric for matrix operations
+    ds$Int_numeric <- as.numeric(as.character(ds$Int))
+    # Add a column of interactions
+    ds$IT <- interaction(ds$Int, ds$Therapist)
+    
+    # Initialize the J matrix for the varaince component given by the Therapist
+    # the matrix is of order n*n_T
+    J_T <- matrix(0, nrow = nrow(ds), ncol = length(levels(ds$Therapist)))
+    for (i in 1:nrow(ds)) {
+      j <- as.integer(ds$Therapist[i])
+      # the (i,j)-th entry of the matrix is 1 if the patient i is treated by the Terapist j
+      J_T[i, j] <- 1
+    }
+    
+    
+    
+    # Initialize the J matrix for the varaince component given by the interaction of the Therapist and Intervention
+    # the matrix is of order n* (n_I*n_T)
+    J_IT <- matrix(0, nrow = nrow(ds), ncol = max(ds$Int_numeric)*length(levels(ds$Therapist)))
+    
+    for (i in 1:nrow(ds)) {
+      if (ds$Int_numeric[i] == 1) {
+        
+        # the (i,j)-th entry of the matrix is 1 if the patient i is treated by the Therapist j via Intervention 1
+        J_IT[i,as.integer(ds$Therapist[i])] <- 1
+      } else if (ds$Int_numeric[i] == 2) {
+        
+        # the (i,j+n_T)-th entry of the matrix is 1 if the patient i is treated by the Therapist j via Intervention 2
+        
+        J_IT[i,(length(levels(ds$Therapist))+as.integer(ds$Therapist[i]))] <- 1
+      }
+      
+    }
+    #print(J_IT)
+    
+    
+    # Initialize the J matrix for the varaince component given by the Batch
+    # the matrix is of order n*n_B
+    J_B <- matrix(0, nrow = nrow(ds), ncol = length(levels(ds$Batch)))
+    
+    for (i in 1:nrow(ds)) {
+      j <- as.integer(ds$Batch[i])
+      # the (i,j)-th entry of the matrix is 1 if the patient i is in Batch j
+      J_B[i, j] <- 1
+    }
+    
+    
+    # Initialize the J matrix for the varaince component given by the interaction of the Batch and Intervention
+    # the matrix is of order n* (n_I*n_B)
+    J_IB <- matrix(0, nrow = nrow(ds), ncol = max(ds$Int_numeric)*length(levels(ds$Batch)))
+    
+    for (i in 1:nrow(ds)) {
+      if (ds$Int_numeric[i] == 1) {
+        
+        # the (i,j)-th entry of the matrix is 1 if the patient i is treated by in Batch j via Intervention 1
+        J_IB[i,as.integer(ds$Batch[i])] <- 1
+      } else if (ds$Int_numeric[i] == 2) {
+        
+        # the (i,j+n_B)-th entry of the matrix is 1 if the patient i is treated in the Batch j via Intervention 2
+        
+        J_IB[i,(length(levels(ds$Batch))+as.integer(ds$Batch[i]))] <- 1
+      }
+      
+    }
+    
+    
+    
+    # Initialize the J matrix for the varaince component given by the interaction of the Therapist and Batch
+    # the matrix is of order n* (n_T*n_B)
+    J_TB <- matrix(0, nrow = nrow(ds), ncol = length(levels(ds$Therapist))*length(levels(ds$Batch)))
+    
+    for (i in 1:nrow(ds)) {
+      
+      # the (i,j)-th entry of the matrix is 1 if the patient i is treated by in Batch ds$Batch[i] via Therapist ds$Therapist[i]
+      J_TB[i,(as.integer(ds$Batch[i])-1)*length(levels(ds$Therapist)) + as.integer(ds$Therapist[i])] <- 1
+      
+    }
+    
+    
+    
+    # Initialize the J matrix for the varaince component given by the interaction of the Intervention, Therapist and Batch
+    # the matrix is of order n* (n_I*n_T*n_B)
+    J_ITB <- matrix(0, nrow = nrow(ds), ncol = max(ds$Int_numeric)*length(levels(ds$Therapist))*length(levels(ds$Batch)))
+    
+    for (i in 1:nrow(ds)) {
+      
+      if (ds$Int_numeric[i] == 1) {
+        # the (i,j)-th entry of the matrix is 1 if the patient is treated via Intervention 1 by Therapist ds$Therapist[i] in Batch ds$Batch[i]
+        J_ITB[i,(as.integer(ds$Batch[i])-1)*length(levels(ds$Therapist)) + as.integer(ds$Therapist[i])] <- 1
+      }
+      
+      if (ds$Int_numeric[i] == 2) {
+        # the (i,j)-th entry of the matrix is 1 if the patient is treated via Intervention 1 by Therapist ds$Therapist[i] in Batch ds$Batch[i]
+        J_ITB[i,(as.integer(ds$Batch[i])-1)*length(levels(ds$Therapist)) + as.integer(ds$Therapist[i]) + length(levels(ds$Therapist))*length(levels(ds$Batch))] <- 1
+      }
+    }
+    
+    
+    # Initialize the J matrix for the varaince component given by the Centre
+    # the matrix is of order n*n_c
+    J_C <- matrix(0, nrow = nrow(ds), ncol = length(levels(ds$Centre)))
+    
+    for (i in 1:nrow(ds)) {
+      j <- as.integer(ds$Centre[i])
+      # the (i,j)-th entry of the matrix is 1 if the patient i is in Centre j
+      J_C[i, j] <- 1
+    }
+    
+    
+    # Initialize the J matrix for the varaince component given by the interaction of the Centre and Intervention
+    # the matrix is of order n* (n_I*n_C)
+    J_IC <- matrix(0, nrow = nrow(ds), ncol = max(ds$Int_numeric)*length(levels(ds$Centre)))
+    
+    for (i in 1:nrow(ds)) {
+      if (ds$Int_numeric[i] == 1) {
+        # the (i,j)-th entry of the matrix is 1 if the patient i is treated by in Centre j via Intervention 1
+        J_IC[i,as.integer(ds$Centre[i])] <- 1
+      } else if (ds$Int_numeric[i] == 2) {
+        
+        # the (i,j+n_C)-th entry of the matrix is 1 if the patient i is treated in Centre j via Intervention 2
+        
+        J_IC[i,(length(levels(ds$Centre))+as.integer(ds$Centre[i]))] <- 1
+      }
+      
+    }
+    
+    # Initialize the J matrix for the varaince component given by the interaction of the Batch and Centre
+    # the matrix is of order n* (n_C*n_B)
+    J_CB <- matrix(0, nrow = nrow(ds), ncol = length(levels(ds$Batch))*length(levels(ds$Centre)))
+    
+    for (i in 1:nrow(ds)) {
+      
+      # the (i,j)-th entry of the matrix is 1 if the patient i is treated by in Centre ds$Centre[i] via Therapist ds$Therapist[i]
+      J_CB[i,(as.integer(ds$Centre[i])-1)*length(levels(ds$Batch)) + as.integer(ds$Batch[i])] <- 1
+      
+    }
+    
+    # Initialize the J matrix for the varaince component given by the interaction of the Intervention, Centre and Batch
+    # the matrix is of order n* (n_I*n_C*n_B)
+    J_ICB <- matrix(0, nrow = nrow(ds), ncol = max(ds$Int_numeric)*length(levels(ds$Centre))*length(levels(ds$Batch)))
+    
+    for (i in 1:nrow(ds)) {
+      
+      if (ds$Int_numeric[i] == 1) {
+        # the (i,j)-th entry of the matrix is 1 if the patient is treated via Intervention 1 by Therapist ds$Therapist[i] in Batch ds$Batch[i]
+        J_ICB[i,(as.integer(ds$Centre[i])-1)*length(levels(ds$Batch)) + as.integer(ds$Batch[i])] <- 1
+      }
+      
+      if (ds$Int_numeric[i] == 2) {
+        # the (i,j)-th entry of the matrix is 1 if the patient is treated via Intervention 1 by Therapist ds$Therapist[i] in Batch ds$Batch[i]
+        J_ICB[i,(as.integer(ds$Centre[i])-1)*length(levels(ds$Batch)) + as.integer(ds$Batch[i]) + length(levels(ds$Centre))*length(levels(ds$Batch))] <- 1
+      }
+    }
+    # Covariance matrix is given by the formula J_T*Diag(sigma_T^2)*t(J_T) + J_IT*Diag(sigma_IT^2)*t(J_IT) + Diag(sigma_E^2)
+    
+    M<- (sig_E^2)*diag(nrow(ds))
+    
+    #print(M)
+    
+    if (length(levels(ds$Batch)) == 1 && length(levels(ds$Centre)) == 1){
+      
+      
+      Cov_mat<- (sig_T)*(J_T%*%diag(length(levels(ds$Therapist)))%*%t(as.matrix(J_T)))+
+        (sig_IT)*(J_IT%*%diag(max(ds$Int_numeric)*length(levels(ds$Therapist)))%*%t(as.matrix(J_IT)))+
+        (sig_E)*diag(nrow(ds))
+    }
+    
+    if (length(levels(ds$Batch)) > 1 && length(levels(ds$Centre)) == 1){
+      
+      
+      
+      Cov_mat<- (sig_T)*(J_T%*%diag(length(levels(ds$Therapist)))%*%t(as.matrix(J_T)))+
+        (sig_B)*(J_B%*%diag(length(levels(ds$Batch)))%*%t(as.matrix(J_B)))+
+        (sig_IT)*(J_IT%*%diag(max(ds$Int_numeric)*length(levels(ds$Therapist)))%*%t(as.matrix(J_IT)))+
+        (sig_IB)*(J_IB%*%diag(max(ds$Int_numeric)*length(levels(ds$Batch)))%*%t(as.matrix(J_IB)))+
+        (sig_TB)*(J_TB%*%diag(length(levels(ds$Therapist))*length(levels(ds$Batch)))%*%t(as.matrix(J_TB)))+
+        (sig_ITB)*(J_ITB%*%diag(max(ds$Int_numeric)*length(levels(ds$Therapist))*length(levels(ds$Batch)))%*%t(as.matrix(J_ITB)))+
+        (sig_E)*diag(nrow(ds))
+    }
+    
+    if (length(levels(ds$Batch)) > 1 && length(levels(ds$Centre)) > 1){
+      
+      Cov_mat<- (sig_T)*(J_T%*%diag(length(levels(ds$Therapist)))%*%t(as.matrix(J_T)))+
+        (sig_B)*(J_B%*%diag(length(levels(ds$Batch)))%*%t(as.matrix(J_B)))+
+        (sig_C)*(J_C%*%diag(length(levels(ds$Centre)))%*%t(as.matrix(J_C)))+
+        (sig_IT)*(J_IT%*%diag(max(ds$Int_numeric)*length(levels(ds$Therapist)))%*%t(as.matrix(J_IT)))+
+        (sig_IB)*(J_IB%*%diag(max(ds$Int_numeric)*length(levels(ds$Batch)))%*%t(as.matrix(J_IB)))+
+        (sig_IC)*(J_IC%*%diag(max(ds$Int_numeric)*length(levels(ds$Centre)))%*%t(as.matrix(J_IC)))+
+        (sig_TB)*(J_TB%*%diag(length(levels(ds$Therapist))*length(levels(ds$Batch)))%*%t(as.matrix(J_TB)))+
+        (sig_CB)*(J_CB%*%diag(length(levels(ds$Centre))*length(levels(ds$Batch)))%*%t(as.matrix(J_CB)))+
+        (sig_ITB)*(J_ITB%*%diag(max(ds$Int_numeric)*length(levels(ds$Therapist))*length(levels(ds$Batch)))%*%t(as.matrix(J_ITB)))+
+        (sig_ICB)*(J_ICB%*%diag(max(ds$Int_numeric)*length(levels(ds$Centre))*length(levels(ds$Batch)))%*%t(as.matrix(J_ICB)))+
+        (sig_E)*diag(nrow(ds))
+      
+    }
+    #print('Covariance matrix')
+    #print(Cov_mat)
+    
+    #Intialize J_fix
+    J_fix <- matrix(1, nrow = nrow(ds), ncol = max(ds$Int_numeric)+2)
+    # 3rd colomn is patient severity
+    J_fix[,3]<- patSeverity
+    
+    for (i in 1:nrow(ds)) {
+      
+      if (ds$Int_numeric[i] == 1) {
+        
+        # the (i,2)-th entry of the matrix is 1 if the patient i is treated by the Intervention 1
+        J_fix[i, max(ds$Int_numeric)] <- 1
+      }
+      else if (ds$Int_numeric[i] == 2) {
+        
+        # the (i,2)-th entry of the matrix is -1 if the patient i is treated by the Intervention 2
+        
+        J_fix[i, max(ds$Int_numeric)] <- -1
+      }
+    }
+    
+    if (Design %in% c(1,5)){  # Patient age added
+      
+      # 4th colomn is patient Age
+      J_fix[,4]<- patAge
+      
+      if(del_2 == 0){
+        
+        if(del_3 == 0){ 
+          
+          # Patient saverity and age not added
+          mu<- J_fix%*%c(del_0,del_1,0,0)}
+        if(del_3 > 0){ 
+          
+          # Patient age added but patient saverity not added
+          mu<- J_fix%*%c(del_0,del_1,0,1)}
+        
+      }
+      if(del_2 > 0){  
+        if(del_3 == 0){ 
+          
+          # Patient age not added but saverity added
+          mu<- J_fix%*%c(del_0,del_1,1,0)}
+        if(del_3 > 0){ 
+          
+          # Patient age and saverity added
+          mu<- J_fix%*%c(del_0,del_1,1,1)}
+        
+      }
+    } # Design loop close
+    
+    if (Design %in% c(2, 3, 4)){  # Patient age not added
+      
+      if(del_2 == 0){
+        
+        # Patient saverity not added
+        mu<- J_fix%*%c(del_0,del_1,0,0)
+      }
+      if(del_2 > 0){  
+        
+        # Patient saverity added
+        mu<- J_fix%*%c(del_0,del_1,1,0)
+        
+      }
+    } #Design loop close
+    
+    #print(mu)
+    #print(J_fix)
+    
+    # Generate from the multivariate normal distribution with mean mu and covariance matrix as Cov_mat
+    samples <- mvrnorm(n = 1, mu = mu, Sigma = Cov_mat)
+    
+    
+    # Add the simulated y values and the contrast variable to the 'ds' data frame
+    ds$y <- as.vector(samples) # Ensure it's a vector for adding as a column
+    ds$contrast <- ifelse(ds$Int == "1", 1, -1) # Create the contrast variable
+    
+    return(ds) # Return the simulated data
+  }
+  
+  
+  # Let's define sigmas for the *current* ds (which is the last one generated by the loops)
+  if(exists("ds")) { # Check if ds exists, to prevent error on initial run
+    if(length(levels(ds$Batch)) == 1 && length(levels(ds$Centre))==1){ 
+      # The sigmas related to factors B and C are 0
+      # sigma's are the variance instead of standard deviation. No need to square in the code
+      sig_T<-0.1    # Sigma for Therapist effect
+      sig_IT<-0.15    # Sigma for Therapist*Intervention effect
+      sig_E<- 0.75      # Sigma for patient specific error
+      sig_B<-0    # Sigma for Batch effect
+      sig_C<-0    # Sigma for Centre effect
+      sig_IB<-0    # Sigma for Intervention*Batch effect
+      sig_IC<-0  # Sigma for Intervention*Centre effect
+      sig_TB<-0    # Sigma for Therapist*Batch effect
+      sig_CB<-0    # Sigma for Centre*Batch effect
+      sig_ITB<-0  # Sigma for Intervention*Therapist*Batch effect
+      sig_ICB<-0    # Sigma for Intervention*Centre*Batch effect
+    } else if(length(levels(ds$Batch)) > 1 && length(levels(ds$Centre))==1){ 
+      # The sigmas related to factor C are 0
+      # sigma's are the variance instead of standard deviation. No need to square in the code
+      sig_T<-0.1     # Sigma for Therapist effect
+      sig_B<-0.1    # Sigma for Batch effect
+      sig_IT<-0.15    # Sigma for Therapist*Intervention effect
+      sig_IB<-0.1    # Sigma for Intervention*Batch effect
+      sig_TB<-0.1    # Sigma for Therapist*Batch effect
+      sig_ITB<-0.1    # Sigma for Intervention*Therapist*Batch effect
+      sig_E<- 0.35      # Sigma for patient specific error
+      sig_C<-0    # Sigma for Centre effect
+      sig_IC<-0  # Sigma for Intervention*Centre effect
+      sig_ICB<-0    # Sigma for Intervention*Centre*Batch effect
+      
+    } else if(length(levels(ds$Batch)) > 1 && length(levels(ds$Centre) )> 1){ 
+      # All sigmas are non zero
+      # sigma's are the variance instead of standard deviation. No need to square in the code
+      sig_T<-0.1     # Sigma for Therapist effect
+      sig_B<-0.1    # Sigma for Batch effect
+      sig_C<-0.1    # Sigma for Centre effect
+      sig_IT<-0.1    # Sigma for Therapist*Intervention effect
+      sig_IB<-0.1    # Sigma for Intervention*Batch effect
+      sig_IC<-0.1    # Sigma for Intervention*Centre effect
+      sig_TB<-0.05    # Sigma for Therapist*Batch effect
+      sig_CB<-0.05    # Sigma for Centre*Batch effect
+      sig_ITB<-0.05    # Sigma for Intervention*Therapist*Batch effect
+      sig_ICB<-0.05    # Sigma for Intervention*Centre*Batch effect
+      sig_E<- 0.2      # Sigma for patient specific error
+      
+    }
+  } else {
+    # Handle case where ds is not yet defined, e.g., if you run only the bottom part of the script
+    message("Warning: 'ds' is not yet defined. Skipping sigma assignment based on ds characteristics.")
+    # You might want to assign default or Example sigma values here for testing purposes
+    # if you plan to run samples_from_Design standalone without the loops above.
+    sig_T<-0.1; sig_B<-0; sig_C<-0; sig_IT<-0.15; sig_IB<-0; sig_IC<-0; sig_TB<-0; sig_CB<-0; sig_ITB<-0; sig_ICB<-0; sig_E<- 1
+  }
+  
+  
+ 
+  # simulate the final data from the Design and store it in the variable  data_structure
+  data_structure <- samples_from_Design(ds, del_0, del_1,del_2,del_3, Design,
+                                        sig_T, sig_B, sig_C,
+                                        sig_IT, sig_IB, sig_IC,
+                                        sig_TB, sig_CB,
+                                        sig_ITB, sig_ICB, sig_E, patSeverity,patAge)
+  
+  
+  # Fit models. This section also assumes 'ds' has been defined.
+  # It uses 'data_structure' which is the output of samples_from_Design.
+  if(exists("data_structure")) {
+    if(length(levels(data_structure$Batch)) == 1 && length(levels(data_structure$Centre))==1){  
+      # Fit this model if there is only 1 block and a centre  
+      reg <- lmer(y ~ contrast + (1|Therapist) + (1|contrast:Therapist), data = data_structure)
+    } else if(length(levels(data_structure$Batch)) > 1 && length(levels(data_structure$Centre))==1){  
+      # Fit this model if there are multiple blocks and only 1 centre  
+      reg <- lmer(y~contrast+(1|Therapist)+(1|Batch)+(1|Therapist:Batch)+
+                    (1|contrast:Therapist)+(1|contrast:Batch)+
+                    (1|contrast:Therapist:Batch), data=data_structure)
+    } else if(length(levels(data_structure$Batch)) > 1 && length(levels(data_structure$Centre))>1){  
+      # Fit this model if there are multiple blocks and centres  
+      reg <- lmer(y~contrast+(1|Therapist)+(1|Batch)+(1|Therapist:Batch)+(1|Centre)+
+                    (1|Centre:Batch)+(1|contrast:Therapist)+(1|contrast:Batch)+
+                    (1|contrast:Therapist:Batch)+(1|contrast:Centre)+
+                    (1|contrast:Centre:Batch),data=data_structure)
+    }
+    #print(Design_num)
+    
+    # The summary of the analysis
+    sum1<- summary(reg)
+    #print(sum1)
+    E_cont<-rep(0,5)
+    # Access the estimate for 'contrast' from the coefficient table
+    E_cont[1] <-  as.numeric(sum1$coefficients["contrast", "Estimate"])
+    E_cont[2] <-  as.numeric(sum1$coefficients["contrast", "Std. Error"])
+    E_cont[3] <- as.numeric(attr(VarCorr(reg)[["Therapist"]], "stddev")[1])
+    E_cont[4] <- as.numeric(attr(VarCorr(reg)[["contrast:Therapist"]], "stddev")[1])
+    
+    # degree of freedom of contrast
+    contrast_df <- as.numeric(sum1$coefficients["contrast", "df"])
+    
+
+    # p value of the significance of the contrast
+    p_value_contrast <- as.numeric(sum1$coefficients["contrast", "Pr(>|t|)"])
+    
+    # Decision rule or type-2 error count
+    if(p_value_contrast > 0.05){E_cont[5] <- 1}
+    if(p_value_contrast < 0.05){E_cont[5] <- 0}
+
+
+    # print(E_cont)
+    
+  } else {
+    message("Warning: 'data_structure' is not defined. Skipping model fitting and summary.")
+  }
+  
+  #print(c(E_cont,Design_num))
+  return(c(E_cont,Design_num))
+  
+}
+
+
+```
+
+The next code make use of the function Analysis_final for n_sim number of simulations and provides the averages of "estimate of Contrast, its standard error, ICC of the Therapist effect and Therapist x Intervention combinations, Type-I and II errors" as output.
+
+```{r}
+
+
+Comarison_D_ij <- function(Design,Example,del_0,del_1,del_2,del_3,n_sim) {
+  
+  
+  # Initialization of the variables
+  m<-rep(0, length(del_2))
+  s<-rep(0, length(del_2))
+  t<-rep(0, length(del_2))
+  it<-rep(0, length(del_2))
+  t2_er<-rep(0, length(del_2))
+  
+  Cont<-rep(0,n_sim)
+  Std<-rep(0,n_sim)
+  Th<-rep(0,n_sim)
+  IT<-rep(0,n_sim)
+  
+  
+  k<-1
+  a<-0
+  
+  for (i in del_2) {
+    contr_2<-0
+    
+    
+    for (j in 1:n_sim) {
+      
+      # compute SE of the estimate over n_sim simulations
+      
+      out<- Analysis_final(Design,Example,del_0,del_1,i,del_3)
+      Cont[j]<- as.numeric(out[1])
+      Std[j]<-  as.numeric(out[2])
+      Th[j]  <-  as.numeric(out[3])
+      IT[j] <-  as.numeric(out[4])
+      contr_2<- contr_2+as.numeric(out[5])
+      
+    }
+    # print the design type
+    print(out[6]) 
+    
+    m[k]<-mean(Cont)   # Compute the avarage of the estimate of contrast  of second scenario
+    s[k]<-mean(Std)    # Compute the avarage of the SE estimate of contrast  of second scenario
+    t[k]<-mean(Th)      # Compute the avarage of the SD of the Therapist effect of second scenario
+    it[k]<-mean(IT)   # Compute the avarage of the SD of the Therapist by Intervention effect of second scenario
+    t2_er[k]<- contr_2/n_sim 
+    
+    
+    print(paste(k*50/length(del_2), "% simulations has been processed in this loop"))
+    
+    
+    
+    k<-k+1 # next round of parameters
+  }
+  
+  return(round(cbind(m,s,t^2,it^2,t2_er),3))
+}
+```
+
+The next chunk takes parameter values and compare the designs D_ij and D_kl for different (i,j) and (k,l)
+
+```{r}
+
+# model parameters for final comparison
+del_0<- 0               # delta_0 =  The overall mean effect
+del_1<- 0.315          # delta_1 = The difference between the mean of all outcomes for the intervention
+                       #           and the overall mean delta_0. 
+                      #  del_1<- 0.315   For Example 1,2
+                      #  del_1<- 0.180   For Example 3
+del_2<- c(0,0.2)     # delta_2 is the measure of patient severity at the baseline
+del_3<- 0           # delta_3 is the measure of patient Age at the baseline
+n_sim <- 10          # Number of simulations
+
+# First Design/Randomisation method and Example to compare
+Design_1<-4
+Example_1<-2
+
+# Second Design/Randomisation method and Example to compare to the first one
+Design_2<-4
+Example_2<-2
+
+
+
+
+
+
+
+
+# Staring the simulations for Design_1 and Example_1
+results_1<-Comarison_D_ij(Design_1,Example_1,del_0,del_1,del_2,del_3,n_sim)
+# Staring the simulations for Design_2 and Example_2
+results_2<-Comarison_D_ij(Design_2,Example_2,del_0,del_1,del_2,del_3,n_sim) 
+
+
+C <- cbind(results_1, results_2)              # put them side by side
+idx <- as.vector(rbind(1:ncol(results_1), ncol(results_1) + 1:ncol(results_2)))
+C_interleaved <- C[, idx]
+# custom colomn names
+colnames(C_interleaved) <- c(  paste("delta_1 D", Design_1, Example_1),
+  paste("delta_1 D", Design_2, Example_2),
+  paste("SE of delta_1 D", Design_1,Example_1),
+   paste("SE of delta_1 D", Design_2,Example_2),
+ paste("Therapist Effect D",Design_1, Example_1),
+   paste("Therapist Effect D",Design_2, Example_2),
+paste("Intervention X Therapist effect D", Design_1, Example_1),
+  paste("Intervention X Therapist effect D", Design_2, Example_2),
+paste("Type-2 error D", Design_1, Example_1),
+paste("Type-2 error D", Design_2, Example_2))
+
+# Colomn and row names
+rownames(C_interleaved) <- c( paste("(del_3,del_2)=", del_3, del_2[1]),paste("(del_3,del_2)=", del_3, del_2[2]))
+
+print("Final Results")
+print(C_interleaved)  # Result
+
+
+
+toc()
+```
