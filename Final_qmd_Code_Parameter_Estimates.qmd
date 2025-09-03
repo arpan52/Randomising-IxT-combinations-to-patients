@@ -561,29 +561,24 @@ Analysis_final <- function(Design,Example,del_0,del_1,del_2,del_3) {
   
   
     
-  if (Design==1){
+   if (Design==1){
     
     if (Example==1){
       
-      Design_num<-"Design D11 - Completely Randomised Parallel-Group Design - 
-            non-randomly assign therapists to patients after randomising interventions to patients"  
-      
-      
-      df <- intervention_generation(data=df, n_Int=2, Int_name = "Int")
-      
-      # Ensure Int is numeric for matrix operations
-      df$Int_numeric <- as.numeric(as.character(df$Int))
-      # Add a column of interactions
-      df$IT <- interaction(df$Int, df$Therapist)
-      # baseline patient Age for bias
-      patient_avAge <- del_3 + rnorm(max(df$Int_numeric)*length(levels(df$Therapist)))
-      # random patient Age  
-      patAge <- patient_avAge[df$IT] +  rnorm(n_Patient) 
+      Design_num<-"Design D11 - Completely Randomised Parallel-Group Design - non-randomly assign therapists to patients after randomising interventions to patients"  
       
       ds <- rand1_function(df, n_Int = 2, trt_factors = NULL,
                            blocking_factors = NULL, Int_name = "Int")
       
       
+      # Ensure Int is numeric for matrix operations
+      ds$Int_numeric <- as.numeric(as.character(ds$Int))
+      # Add a column of interactions
+      ds$IT <- interaction(ds$Int, ds$Therapist)
+      # baseline patient Age for bias
+      patient_avAge <- del_3 + rnorm(max(ds$Int_numeric)*length(levels(ds$Therapist)))
+      # random patient Age  
+      patAge <- patient_avAge[ds$IT] +  rnorm(n_Patient) 
       
     }
   } 
@@ -591,25 +586,20 @@ Analysis_final <- function(Design,Example,del_0,del_1,del_2,del_3) {
     
     if (Example==2){
       
-      Design_num<- "Design D12- Randomised Block [Batch] Parallel-Group Design - 
-               non-randomly assign therapists to patients after randomising interventions to patients"   
+      Design_num<- "Design D12- Randomised Block [Batch] Parallel-Group Design - non-randomly assign therapists to patients after randomising interventions to patients"   
       
-      
-      df <- intervention_generation(data=df, n_Int=2, Int_name = "Int")
-      
-      # Ensure Int is numeric for matrix operations
-      df$Int_numeric <- as.numeric(as.character(df$Int))
-      # Add a column of interactions
-      df$IT <- interaction(df$Int, df$Therapist)
-      # baseline patient Age for bias
-      patient_avAge <- del_3 + rnorm(max(df$Int_numeric)*length(levels(df$Therapist)))
-      # random patient Age  
-      patAge <- patient_avAge[df$IT] +  rnorm(n_Patient) 
       
       ds <- rand1_function(df, n_Int = 2, trt_factors = NULL,
                            blocking_factors = c("Batch"), Int_name = "Int")
       
-      
+      # Ensure Int is numeric for matrix operations
+      ds$Int_numeric <- as.numeric(as.character(ds$Int))
+      # Add a column of interactions
+      ds$IT <- interaction(ds$Int, ds$Therapist)
+      # baseline patient Age for bias
+      patient_avAge <- del_3 + rnorm(max(ds$Int_numeric)*length(levels(ds$Therapist)))
+      # random patient Age  
+      patAge <- patient_avAge[ds$IT] +  rnorm(n_Patient) 
       
     }
   }
@@ -617,28 +607,23 @@ Analysis_final <- function(Design,Example,del_0,del_1,del_2,del_3) {
     
     if (Example==3){
       
-      Design_num<- "Design D13 - Randomised Block [Batch, Centre] Parallel-Group 
-                                Design - non-randomly assign therapists to patients after randomising interventions to patients"   
+      Design_num<- "Design D13 - Randomised Block [Batch, Centre] Parallel-Group Design -  non-randomly assign therapists to patients after randomising interventions to patients"   
       
-      
-      df <- intervention_generation(data=df, n_Int=2, Int_name = "Int")
-      
-      # Ensure Int is numeric for matrix operations
-      df$Int_numeric <- as.numeric(as.character(df$Int))
-      # Add a column of interactions
-      df$IT <- interaction(df$Int, df$Therapist)
-      # baseline patient Age for bias
-      patient_avAge <- del_3 + rnorm(max(df$Int_numeric)*length(levels(df$Therapist)))
-      # random patient Age  
-      patAge <- patient_avAge[df$IT] +  rnorm(n_Patient) 
       
       ds <- rand1_function(df, n_Int = 2, trt_factors = NULL,
                            blocking_factors = c("Batch", "Centre"), Int_name = "Int")
-      
+      # Ensure Int is numeric for matrix operations
+      ds$Int_numeric <- as.numeric(as.character(ds$Int))
+      # Add a column of interactions
+      ds$IT <- interaction(ds$Int, ds$Therapist)
+      # baseline patient Age for bias
+      patient_avAge <- del_3 + rnorm(max(ds$Int_numeric)*length(levels(ds$Therapist)))
+      # random patient Age  
+      patAge <- patient_avAge[ds$IT] +  rnorm(n_Patient) 
       
       
     }
-  }  
+  }    
   
   
   
@@ -646,8 +631,7 @@ Analysis_final <- function(Design,Example,del_0,del_1,del_2,del_3) {
     
     if (Example==1){
       
-      Design_num <- "Design D21 Completely Randomised Parallel-Group Design -  
-            non-randomly assign therapists to patients before randomising interventions to patients"
+      Design_num <- "Design D21 Completely Randomised Parallel-Group Design - non-randomly assign therapists to patients before randomising interventions to patients"
       
       
       ds <- rand1_function(df, n_Int = 2, trt_factors = NULL,
@@ -659,8 +643,7 @@ Analysis_final <- function(Design,Example,del_0,del_1,del_2,del_3) {
     
     if (Example==2){
       
-      Design_num<- "Design D22 - Randomised Block [Batch] Parallel-Group Design -
-            non-randomly assign therapists to patients before randomising interventions to patients"   
+      Design_num<- "Design D22 - Randomised Block [Batch] Parallel-Group Design -  non-randomly assign therapists to patients before randomising interventions to patients"   
       
       ds <- rand1_function(df, n_Int = 2, trt_factors = NULL,
                            blocking_factors = c("Batch"), Int_name = "Int")
@@ -671,8 +654,7 @@ Analysis_final <- function(Design,Example,del_0,del_1,del_2,del_3) {
     
     if (Example==3){
       
-      Design_num<- "Design D23 - Randomised Block [Batch, Centre] Parallel-Group  
-                        Design - non-randomly assign therapists to patients before randomising interventions to patients"   
+      Design_num<- "Design D23 - Randomised Block [Batch, Centre] Parallel-Group Design - non-randomly assign therapists to patients before randomising interventions to patients"   
       
       ds <- rand1_function(df, n_Int = 2, trt_factors = NULL,
                            blocking_factors = c("Batch", "Centre"), Int_name = "Int")
@@ -845,64 +827,58 @@ Analysis_final <- function(Design,Example,del_0,del_1,del_2,del_3) {
   
 
   
-  if (Design==5){
+ if (Design==5){
     
     if (Example==1){
       
-      Design_num<-"Design D51 - Completely Randomised Factorial Design - randomising interventions to patients, then randomising therapists to patients, blocking the latter by the randomised intervention"  
+      Design_num<-"Design D51 - Completely Randomised Factorial Design -  randomising interventions to patients, then randomising therapists to patients, blocking the latter 
+by the randomised intervention"  
       
-      df <- intervention_generation(data=df, n_Int=2, Int_name = "Int")
-      
-      # Ensure Int is numeric for matrix operations
-      df$Int_numeric <- as.numeric(as.character(df$Int))
-      # Add a column of interactions
-      df$IT <- interaction(df$Int, df$Therapist)
-      # baseline patient Age for bias
-      patient_avAge <- del_3 + rnorm(max(df$Int_numeric)*length(levels(df$Therapist)))
-      # random patient Age  
-      patAge <- patient_avAge[df$IT] +  rnorm(n_Patient) 
       
       ds1 <- rand1_function(df, n_Int = 2, trt_factors = NULL,
                             blocking_factors = NULL, Int_name = "Int")
-      #View(ds1)
 
-      
+      # Ensure Int is numeric for matrix operations
+      ds1$Int_numeric <- as.numeric(as.character(ds1$Int))
+      # Add a column of interactions
+      ds1$IT <- interaction(ds1$Int, ds1$Therapist)
+      # baseline patient Age for bias
+      patient_avAge <- del_3 + rnorm(max(ds1$Int_numeric)*length(levels(ds1$Therapist)))
+      # random patient Age  
+      patAge <- patient_avAge[ds1$IT] +  rnorm(n_Patient) 
       
       # Do second randomization of the Therapists as clusters.
       ds <- rand2_function(ds1, n_Cluster = length(levels(ds1$Therapist)), trt_factors = NULL, blocking_factors = c("Int"), Cluster_name = "Cluster")
       
       # Rename Clusters as Therapist and make it a factor again
       ds$Therapist <- factor(ds$Cluster)
-      #View(ds)   
       # reorder the data based on the patient indices
-      ds <- ds[order(ds$Patient), ]
-     # View(ds_ordered)
-      #print(sum(ds$Therapist == 2 & ds$Int == 1))
-      
+      ds3 <- ds[order(ds$Patient), ]
+
     }
   } 
   if (Design==5){
     
     if (Example==2){
       
-      Design_num<- "Design D52- Randomised Block Factorial Design - randomising interventions to patients, then randomising therapists to patients, blocking the latter by the randomised intervention"    
+      Design_num<- "Design D52- Randomised Block Factorial Design - randomising interventions to patients, then randomising therapists to patients, blocking the latter 
+by the randomised intervention"    
       
       
       df <- intervention_generation(data=df, n_Int=2, Int_name = "Int")
       
-      # Ensure Int is numeric for matrix operations
-      df$Int_numeric <- as.numeric(as.character(df$Int))
-      # Add a column of interactions
-      df$IT <- interaction(df$Int, df$Therapist)
-      # baseline patient Age for bias
-      patient_avAge <- del_3 + rnorm(max(df$Int_numeric)*length(levels(df$Therapist)))
-      # random patient Age  
-      patAge <- patient_avAge[df$IT] +  rnorm(n_Patient) 
       
       ds1 <- rand1_function(df, n_Int = 2, trt_factors = NULL,
                             blocking_factors = c("Batch"), Int_name = "Int")
+      # Ensure Int is numeric for matrix operations
+      ds1$Int_numeric <- as.numeric(as.character(ds1$Int))
+      # Add a column of interactions
+      ds1$IT <- interaction(ds1$Int, ds1$Therapist)
+      # baseline patient Age for bias
+      patient_avAge <- del_3 + rnorm(max(ds1$Int_numeric)*length(levels(ds1$Therapist)))
+      # random patient Age  
+      patAge <- patient_avAge[ds1$IT] +  rnorm(n_Patient) 
       
-
       
       # Do second randomization of the Therapists as clusters.
       
@@ -914,7 +890,7 @@ Analysis_final <- function(Design,Example,del_0,del_1,del_2,del_3) {
       ds$Therapist<- factor(ds$Therapist)
       
       # reorder the data based on the patient indices
-       ds <- ds[order(ds$Patient), ]
+      ds <- ds[order(ds$Patient), ]
       
     }
   }
@@ -922,24 +898,24 @@ Analysis_final <- function(Design,Example,del_0,del_1,del_2,del_3) {
     
     if (Example==3){
       
-      Design_num<- "Design D53 - Multicentre Randomised Block Factorial Design - 
-            randomising interventions to patients, then randomising therapists to patients, blocking the latter by the randomised intervention"  
+      Design_num<- "Design D53 - Multicentre Randomised Block Factorial Design -  randomising interventions to patients, then randomising therapists to patients, blocking the latter 
+by the randomised intervention"  
       
       
       df <- intervention_generation(data=df, n_Int=2, Int_name = "Int")
       
-      # Ensure Int is numeric for matrix operations
-      df$Int_numeric <- as.numeric(as.character(df$Int))
-      # Add a column of interactions
-      df$IT <- interaction(df$Int, df$Therapist)
-      # baseline patient Age for bias
-      patient_avAge <- del_3 + rnorm(max(df$Int_numeric)*length(levels(df$Therapist)))
-      # random patient Age  
-      patAge <- patient_avAge[df$IT] +  rnorm(n_Patient) 
+      
       
       ds1 <- rand1_function(df, n_Int = 2, trt_factors = NULL,
                             blocking_factors = c("Batch", "Centre"), Int_name = "Int")
-      
+      # Ensure Int is numeric for matrix operations
+      ds1$Int_numeric <- as.numeric(as.character(ds1$Int))
+      # Add a column of interactions
+      ds1$IT <- interaction(ds1$Int, ds1$Therapist)
+      # baseline patient Age for bias
+      patient_avAge <- del_3 + rnorm(max(ds1$Int_numeric)*length(levels(ds1$Therapist)))
+      # random patient Age  
+      patAge <- patient_avAge[ds1$IT] +  rnorm(n_Patient) 
       
       ds <- rand2_function(ds1, n_Cluster = length(levels(ds1$Therapist)), trt_factors = NULL, blocking_factors = c("Int", "Batch", "Centre"), Cluster_name = "Cluster")
       
@@ -961,21 +937,11 @@ Analysis_final <- function(Design,Example,del_0,del_1,del_2,del_3) {
       # --- Drop the temporary columns ---
       ds <- ds[, !(names(ds) %in% c("Centre_numeric", "Therapist_Cluster_numeric","Cluster","Therapist_Global"))]
       
-
+      
       
       
     }
-  }  
-  
-  
-  
-  
-
-   
-  
-  
-  
-  
+  }
   
   
   ########################################################################################################
@@ -1509,3 +1475,4 @@ print(C_interleaved)  # Result
 
 toc()
 ```
+
