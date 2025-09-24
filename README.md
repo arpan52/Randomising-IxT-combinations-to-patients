@@ -1,8 +1,6 @@
 # Randomising-IxT-Combinations-to-Patients
 
-This repository contain the source R codes for all simulations conducted in the paper:
-
-**_Orthogonal factorial designs for trials of therapist-delivered interventions: Randomising intervention–therapist combinations to patients_**
+This repository contain the source R codes (.qmd files) for all simulations conducted in the paper **_Orthogonal factorial designs for trials of therapist-delivered interventions: Randomising intervention–therapist combinations to patients_.** It also have R datasets (.rds files) that are used in Supplementary File F of the paper.
 
 ---
 
