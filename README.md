@@ -4,9 +4,9 @@ This repository contain the source R codes (.qmd files) for all simulations cond
 
 ---
 
-## 📘 Description of both the codes
+## 📘 Description of the codes
 
-The codebase **Final_qmd_Code_Parameter_Estimates.qmd** and **Final_qmd_Code_Parameter_Estimates.qmd** includes functions corresponding to five randomisation scenarios as described in **Section 5** of the paper. Each function simulates different randomisation strategies of patients to interventions and therapists.
+The codebase **Final_qmd_Code_Parameter_Estimates.qmd** and **Final_qmd_Code_Parameter_Estimates.qmd** includes functions corresponding to five randomisation scenarios as described in **Section 5** of the paper. Each function simulates different randomisation strategies of patients to interventions and therapists. Similarly, the code named **Paper#2_SupplementaryFileF.qmd** contains the functions used to obtain the anova and regression estimates for three motivating examples.
 
 ---
 
