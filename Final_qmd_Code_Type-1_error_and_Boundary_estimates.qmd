@@ -1,5 +1,6 @@
 ---
 title: "Code for obtaining the Type-I error and % of Boundary Estimates"
+author: "Arpan Singh"
 format: html
 editor: visual
 ---
@@ -1455,4 +1456,5 @@ print(C_interleaved)  # Result
 
 toc()
 ```
+
 
