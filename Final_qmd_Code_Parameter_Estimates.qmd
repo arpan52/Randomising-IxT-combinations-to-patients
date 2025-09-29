@@ -1,5 +1,6 @@
 ---
 title: "Code for obtaining the fixed and random effect estimates and Type-2 error"
+author: "Arpan Singh"
 format: html
 editor: visual
 ---
@@ -1475,4 +1476,5 @@ print(C_interleaved)  # Result
 
 toc()
 ```
+
 
