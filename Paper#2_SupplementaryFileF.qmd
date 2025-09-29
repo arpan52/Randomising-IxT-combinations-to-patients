@@ -1,0 +1,689 @@
+---
+title: "Supplementary File F - Example R Output"
+author: "Rebecca Walwyn"
+format: html
+editor: visual
+---
+
+A single dataset for each case below was generated for illustrative purposes only.
+
+## **1. Completely Randomised Factorial Design**
+
+### a) Case One - Two Interventions Only
+
+```{r}
+
+CrossedDataset1 <- readRDS("C:/Datasets/CrossedDataset1.rds")
+
+# ANOVA
+
+aov1 <- aov(y~I+Error(T+I:T), contrasts=list(I=contr.sum), data=CrossedDataset1)
+summary(aov1)
+coefficients(aov1)
+print(model.tables(aov1,"means"))
+
+# Note that the fixed effect of factor I appears in the W_I∧T stratum, where the 
+# residual degrees of freedom are 15. Note also, for the fixed effect of factor I, 
+# F = 21.07 and p = 0.000354.  It can be  seen that the estimates of ξ_T, ξ_I∧T and 
+# ξ_E are 15.53, 6.04 and 3.193 respectively and that δ_0= 6.50708 and δ_1= 
+# 0.6307375. Finally note that 0.6307375 is half the difference between the mean of
+# all outcomes on level 1 of factor I (i.e. 7.138) and the mean of all outcomes on 
+# level 2 of factor I (i.e. 5.876).
+
+# For the random effect of factor T, F = 15.53/6.04 = 2.57119205298 on 15 and 15 
+# degrees of freedom
+
+pf(2.57119205298, 15, 15, lower.tail=F)
+
+# For the random effect of factor I∧T, F = 6.04/3.193 = 1.89163795803 on 15 and 288
+# degrees of freedom
+
+pf(1.89163795803, 15, 288, lower.tail=F)
+
+# Regression
+
+library(lmerTest)
+reg1 <- lmer(y~I+(1|T)+(1|I:T), contrasts=list(I=contr.sum), data=CrossedDataset1)
+summary(reg1)
+ls_means(reg1, which = "I", pairwise = TRUE)
+ranova(reg1)
+
+# Note this analysis could have been done using the lme4 command rather than the 
+# lmer command used here. The Satterthwaite degrees of freedom for the fixed effect
+# of factor I are 15.0013 which is approximately 15 as expected. Note that t = 4.59
+# (=sqrt(21.07)) and p = 0.000354 as before. The estimates of σ_u1^2,σ_v1^2 and 
+# σ_e^2 are 0.4743, 0.2848 and 3.1932 respectively. Using Equations(4) (5) and (6),
+# these give the estimates of ξ_T, ξ_I∧T and ξ_E  above precisely. As before, it can
+# be seen that δ_0= 6.5071 and δ_1= 0.6307, and that 0.6307 is half the difference 
+# in the mean of all outcomes for levels 1 and 2 of factor I given as 1.26148. Note
+# that the standard error of δ_0 is 0.1374 which is also half of 0.27481.
+
+# Note: using the following code to force a specific contrast gives the same output
+reg1_contrasts <- lmer(y~contrast1+(1|T)+(1|I:T), data=CrossedDataset1)
+summary(reg1_contrasts)
+ranova(reg1_contrasts)
+```
+
+### b) Case Two - Three Interventions
+
+```{r}
+
+CrossedDataset1_3Ints <- readRDS("C:/Datasets/CrossedDataset1_3Ints.rds")
+
+# ANOVA – Overall
+
+aov1_3ints_1 <- aov(y~I+Error(T+I:T), data=CrossedDataset1_3Ints)
+summary(aov1_3ints_1)
+print(model.tables(aov1_3ints_1,"means"))
+
+# Note that the fixed effect of factor I appears in the W_I∧T stratum, where the 
+# residual degrees of freedom are 30. Note also, for the overall fixed effect of 
+# factor I, F = 28.96 on 2 and 30 degrees of freedom, and p = 0.0000000989. It can 
+# be seen that the estimates of ξ_T, ξ_I∧T and ξ_E  are 8.516, 5.59 and 3.187 
+# respectively.
+
+# For the random effect of factor T, F = 8.516/5.59 = 1.52343470483 on 15 and 30 
+# degrees of freedom
+
+pf(1.52343470483, 15, 30, lower.tail=F)
+
+# For the random effect of factor I∧T, F = 5.59/3.187 = 1.75400062754 on 30 and 432
+# degrees of freedom
+
+pf(1.75400062754, 30, 432, lower.tail=F)
+
+# Note that no specific contrasts are given in the output. The coefficients command
+# does not give the orthogonal contrasts of interest so are not provided here.
+
+# It may be desirable to fit specific contrasts of interest – first contrast1 and 
+# contrast2
+
+aov1_3ints_2 <- aov(y~contrast1+contrast2+Error(T+I:T), data=CrossedDataset1_3Ints)
+summary(aov1_3ints_2)
+
+#Then contrast2 and contrast3
+
+aov1_3ints_3 <- aov(y~contrast2+contrast3+Error(T+I:T), data=CrossedDataset1_3Ints)
+summary(aov1_3ints_3)
+
+# Note whether contrast1 or contrast3 is included makes no difference in the ANOVA 
+# model. Note also that the sums of squares for the two orthogonal contrasts (i.e.,
+# 320.4 and 3.1) add up to the sum of squares for the overall effect of factor I 
+# (i.e., 323.5).
+
+#Regression - first contrast1 and contrast2
+
+library(lmerTest)
+reg1_3ints_1 <- lmer(y~contrast1+contrast2+(1|T)+(1|I:T), data
+                     =CrossedDataset1_3Ints)
+summary(reg1_3ints_1)
+ranova(reg1_3ints_1)
+
+# Note, as in the two interventions case, this analysis could have been done using 
+# the lme4 command rather than the lmer command used here. The Satterthwaite 
+# degrees of freedom for the orthogonal contrasts of factor I are 30.00004 which is
+# approximately 30 as expected. The estimates of σ_u1^2, σ_v1^2 and σ_e^2 are 
+# 0.09769, 0.23978 and 3.18725 respectively. Using Equations (4), (5) and (6), 
+# these give the estimates of ξ_T, ξ_I∧T and ξ_E above precisely. It can be seen 
+# that δ_0=7.89185 (the grand mean). 
+
+# The estimate for contrast1 is given by 1/6*[1*(8.836)+1*(6.835)-2*(8.005)]=-0.339
+# /6=-0.0565. Equivalently, it is half the difference between the grand mean 
+# (7.89185) and the mean of all outcomes for level 3 of factor I (8.005), which 
+# equals -0.056575. The estimate of contrast2 is given by 1/2*[1*(8.836)-1*(6.835)
+# +0*(8.005)]=2.001/2=1.00005. This is half the difference between the mean of all 
+# outcomes for levels 1 (8.836) and 2 (6.835) of factor I. 
+
+# We then fit the regression model using contrast2 and contrast3
+
+reg1_3ints_2 <- lmer(y~contrast2+contrast3+(1|T)+(1|I:T), data
+                     =CrossedDataset1_3Ints)
+summary(reg1_3ints_2)
+
+# Note that the model is unchanged. The only difference is the estimate for 
+# contrast3, which  is given by 3/2*[0.5*(8.836)+0.5*(6.835)-1*(8.005)]=-0.1695/1.5
+# =-0.113. Equivalently, this is the difference between the grand mean (7.89185) 
+# and the mean of all outcomes for level 3 of  factor I (8.005), which equals 
+# -0.11315.
+
+# Note: where factor I has 3 levels, the following code gives i) the difference 
+# between the mean of all outcomes for level 1 of factor I (8.836) and the grand 
+# mean (7.891846), which equals 0.944154, and ii) the difference between the mean 
+# of all outcomes for level 2 of factor I (6.835) and the grand mean (7.891846), 
+# which equals -1.056846. Note that these contrasts are not orthogonal and are 
+# hence not recommended unless specifically of interest.
+
+reg1_3ints_3<-lmer(y~I+(1|T)+(1|I:T),contrasts=list(I=contr.sum),data
+                   =CrossedDataset1_3Ints)
+summary(reg1_3ints_3)
+
+# Hence, we recommended that the specific contrasts of interest are entered into 
+# the ANOVA or regression model directly.
+```
+
+## **2. Randomised Block Factorial Design**
+
+### a) Case One - Two Interventions Only
+
+```{r}
+
+CrossedDataset2 <- readRDS("C:/Datasets/CrossedDataset2.rds")
+
+# ANOVA
+
+aov2 <- aov(y~I+Error(I*T*B), contrasts=list(I=contr.sum), data=CrossedDataset2)
+summary(aov2) 
+coefficients(aov2)
+print(model.tables(aov2,"means"))
+
+# Note that the fixed effect of factor I appears in the W_I stratum, where there 
+# are no residual degrees of freedom. It can be seen that estimates of ξ_T,ξ_B,ξ_I∧T
+# ξ_I∧B,ξ_T∧B,ξ_I∧T∧B and ξ_E are 28.85, 79.13, 5.569, 25.08, 4.338, 3.553 and 2.916
+# respectively. As such, the estimate of ξ_I = 5.569+25.08-3.553=27.0983 so the 
+# approximate F is 231.9/27.0983=8.558. Using Equation (1), the denominator 
+# degrees of freedom for this approximate F test are 4.6022. The p-value can be    
+# obtained using
+
+pf(8.557732404, 1, 4.602238732, lower.tail=F)
+
+# Note that the estimates of δ_0=19.42835 and δ_1=-0.851298. Finally note that 
+# -0.851298 is half the difference between the mean of all outcomes on level 1 of 
+# factor I (18.577) and the mean of all outcomes on level 2 of factor I (20.280).
+
+# For the random effect of factor T, F = 28.85/6.354 = 12.45357255 on 15 and 
+# 15.57841919 degrees of freedom, so the p-value is
+
+pf(12.45357255, 15, 15.57841919, lower.tail=F)
+
+# For the random effect of factor B, F = 79.13/25.865 = 3.059346607 on 4 and 
+# 4.240187202 degrees of freedom, so the p-value is
+
+pf(3.059346607, 4, 4.240187202, lower.tail=F)
+
+# For the random effect of factor I∧T, F = 5.569/3.553 = 1.567407824 on 15 and 60 
+# degrees of freedom, so the p-value is
+
+pf(1.567407824, 15, 60, lower.tail=F)
+
+# For the random effect of factor I∧B, F = 25.08/3.553 = 7.058823529 on 4 and 60 
+# degrees of freedom, so the p-value is
+
+pf(7.058823529, 4, 60, lower.tail=F)
+
+# For the random effect of factor T∧B, F = 4.338/3.553 = 1.220940051 on 60 and 60 
+# degrees of freedom, so the p-value is
+
+pf(1.220940051, 60, 60, lower.tail=F)
+
+# For the random effect of factor I∧T∧B, F = 3.553/2.916 = 1.218449931 on 60 and 
+# 160 degrees of freedom, so the p-value is
+
+pf(1.218449931, 60, 160, lower.tail=F)
+
+#Regression
+
+library(lmerTest)
+reg2 <- lmer(y~I+(1|T)+(1|B)+(1|T:B)+(1|I:T)+(1|I:B)+(1|I:T:B), 
+             contrasts=list(I=contr.sum), data=CrossedDataset2)
+summary(reg2)
+ls_means(reg2, which = "I", pairwise = TRUE)
+ranova(reg2)
+
+# Note: this analysis should be done with the lmer command used here. Satterthwaite
+# degrees of  freedom for the fixed effect of I are 4.6021 as expected. Note that t
+# =-2.925 (=sqrt(8.558)) and p=0.0363 as before. It can be seen that estimates of 
+# σ_u1^2, σ_u2^2, σ_u3^2, σ_v1^2, σ_v2^2, σ_v3^2 and σ_e^2 are 1.1249, 0.8322, 
+# 0.1963, 0.2016, 0.6728, 0.3185 and 2.9157, respectively. Using Equations (E.1) to
+# (E.7), these give the estimates of ξ_T,ξ_B,ξ_I∧T,ξ_I∧B,ξ_T∧B,ξ_I∧T∧B and ξ_E  
+# above precisely. As before, it can be seen that estimates of δ_0=19.4283 and δ_1= 
+# -0.8513, and that -0.8513 is half the difference between the means of all 
+# outcomes on levels 1 and 2 of factor I, given as -1.70260. Note that the standard
+# error of the estimate of δ_0 is 0.2910 which is also half 0.58202.
+
+# ANOVA (again)
+
+# It is of interest to see what R does if factor I is only included as a fixed 
+# effect and the  order of the random effects is varied. See below.    
+
+aov2a<-aov(y~I+Error(T*B+I:T+I:B+I:T:B), contrasts=list(I=contr.sum),
+           data=CrossedDataset2)
+summary(aov2a)
+
+aov2b<-aov(y~I+Error(T+B+I:B+I:T:B+T:B+I:T),contrasts=list(I=contr.sum),
+           data=CrossedDataset2)
+summary(aov2b)
+
+# Note: the output here shows that the fixed effect of factor I incorrectly appears
+# in the W_I∧T or W_I∧C stratum, depending on whether I:T or I:C appears in the 
+# random part of the model statement first, respectively.
+```
+
+### b) Case Two - Three Interventions
+
+```{r}
+
+CrossedDataset2_3Ints <- readRDS("C:/Datasets/CrossedDataset2_3Ints.rds")
+
+# ANOVA
+
+aov2_3ints_1<-aov(y~I+Error(I*T*B), data=CrossedDataset2_3Ints)
+summary(aov2_3ints_1)
+print(model.tables(aov2_3ints_1,"means"))
+
+# Note that the fixed effect of factor I appears in the W_I stratum, where there 
+# are no residual degrees of freedom. It can be seen that estimates of ξ_T, ξ_B, 
+# ξ_I∧T, ξ_I∧B, ξ_T∧B, ξ_I∧T∧B and ξ_E are 8.907, 32.04, 5.222, 16.25, 6.286, 4.256 
+# and 4.152 respectively. As such, the estimate of ξ_I = 5.222+16.25-4.256=17.21797 
+# so the approximate F is 29.7/17.218=1.725. Using Equation (1), the denominator 
+# degrees of freedom for this approximate F test are 8.700. The p-value can be
+# obtained using
+
+pf(1.724942023, 2, 8.700040024, lower.tail=F)
+
+# For the random effect of factor T, F = 8.907/7.252 = 1.228212907 on 15 and 
+# 30.60340223 degrees of freedom, so the p-value is
+
+pf(1.228212907, 15, 30.60340223, lower.tail=F)
+
+# For the random effect of factor B, F = 32.04/18.28 = 1.75273523 on 4 and 
+# 9.881279215 degrees of freedom, so the p-value is
+
+pf(1.75273523, 4, 9.881279215, lower.tail=F)
+
+# For the random effect of factor I∧T, F = 5.222/4.256 = 1.226973684 on 30 and 120 
+# degrees of freedom, so the p-value is
+
+pf(1.226973684, 30, 120, lower.tail=F)
+
+# For the random effect of factor I∧B, F = 16.25/4.256 = 3.818139098 on 8 and 120 
+# degrees of freedom, so the p-value is
+
+pf(3.818139098, 8, 120, lower.tail=F)
+
+# For the random effect of factor T∧B, F = 6.286/4.256 = 1.476973684 on 60 and 120 
+# degrees of freedom, so the p-value is
+
+pf(1.476973684, 60, 120, lower.tail=F)
+
+# For the random effect of factor I∧T∧B, F = 4.256/4.152 = 1.02504817 on 120 and 
+# 240 degrees of freedom, so the p-value is
+
+pf(1.02504817, 120, 240, lower.tail=F)
+
+# Note that no specific contrasts are given in the output. The coefficients command
+# does not  give the orthogonal contrasts of interest so are not provided here. 
+
+# It may be desirable to fit specific contrasts of interest – first contrast1 and 
+# contrast2
+
+aov2_3ints_2<-aov(y~contrast1+contrast2+Error(I*T*B), data=CrossedDataset2_3Ints)
+summary(aov2_3ints_2)
+
+# Then contrast2 and contrast3
+
+aov2_3ints_3<-aov(y~contrast2+contrast3+Error(I*T*B), data=CrossedDataset2_3Ints)
+summary(aov2_3ints_3)
+
+# Note whether contrast1 or contrast3 is included makes no difference to the ANOVA 
+# model. The sums of squares for the two orthogonal contrasts (i.e., 48.44 and 
+# 10.96) add up to the sum of squares for the overall effect of factor I (i.e., 
+# 59.4).
+
+# For the fixed effect of contrast1, F = 10.96/17.21797 = 0.63654426160 on 1 and 
+# 8.700040024 degrees of freedom, so the p-value is
+
+pf(0.63654426160, 1, 8.700040024, lower.tail=F)
+
+# For the fixed effect of contrast2, F = 48.44/17.21797 = 2.81333978395 on 1 and 
+# 8.700040024 degrees of freedom, so the p-value is
+
+pf(2.81333978395, 1, 8.700040024, lower.tail=F)
+
+# Regression – first contrast1 and contrast2
+
+library(lmerTest)
+reg2_3ints_1<-lmer(y~contrast1+contrast2+(1|T)+(1|B)+(1|T:B)+(1|I:T)+(1|I:B)
+                   +(1|I:T:B), data=CrossedDataset2_3Ints)
+summary(reg2_3ints_1)
+ranova(reg2_3ints_1)
+
+# Note: this analysis should be done with the lmer command used here. Satterthwaite
+# degrees of  freedom for the fixed effect of I are 8.7002 as expected. Note that 
+# for contrast1 t=0.798 (=sqrt(0.63654426160)) and p=0.446 as before. Note that for
+# contrast2 t=1.677(=sqrt(2.81333978395)) and p=0.129 as before.
+
+# It can be seen that estimates of σ_u1^2, σ_u2^2, σ_u3^2, σ_v1^2, σ_v2^2, σ_v3^2 
+# and σ_e^2 are 0.05517, 0.14332, 0.33835, 0.09663, 0.37488, 0.05181 and 4.15189 
+# respectively. Using Equations (E.1) to (E.7), these give the estimates of ξ_T, 
+# ξ_B,ξ_I∧T,ξ_I∧B,ξ_T∧B,ξ_I∧T∧B and ξ_E above precisely.
+ 
+# It can be seen that δ_0=18.6456 (the grand mean). The estimate for contrast1 is 
+# given by 1/6*[1*(19.141)+1*(18.363)-2*(18.432)]=0.64/6=0.10667. Equivalently, it 
+# is half the difference between the grand mean (18.6456) and the mean of all 
+# outcomes for level 3 of factor I (18.432), which equals 0.1068. The estimate of 
+# contrast2 is given by 1/2*[1*(19.141)-1*(18.363)+0*(18.432)]=0.778/2=0.389. This 
+# is half the difference between the mean of all outcomes for levels 1 (19.141) and
+# 2 (18.363) of factor I. 
+
+# We then fit the regression model using contrast2 and contrast3
+
+reg2_3ints_2<-lmer(y~contrast2+contrast3+(1|T)+(1|B)+(1|T:B)+(1|I:T)+(1|I:B)
+                   +(1|I:T:B), data=CrossedDataset2_3Ints)
+summary(reg2_3ints_2)
+
+# Note that the model is unchanged. The only difference is the estimate for 
+# contrast3, which is given by 3/2*[0.5*(19.141)+0.5*(18.363)-1*(18.432)]=0.32/1.5
+# =0.21333. Equivalently, this  is the difference between the grand mean (18.6456) 
+# and the mean of all outcomes for level 3  of factor I (18.432), which equals 
+# 0.2136.
+
+# Note: where factor I has 3 levels, the following code gives i) the difference 
+# between the mean of all outcomes for level 1 of factor I (19.141) and the grand 
+# mean (18.6456), which equals 0.4954, and ii) the difference between the mean of 
+# all outcomes for level 2 of factor I (18.363) and the grand mean (18.6456), which
+# equals -0.2826. Note that these contrasts are not orthogonal and are hence not 
+# recommended unless specifically of interest.  
+
+reg2_3ints_3<-lmer(y~I+(1|T)+(1|B)+(1|T:B)+(1|I:T)+(1|I:B)+(1|I:T:B),
+                   contrasts=list(I=contr.sum),data=CrossedDataset2_3Ints)
+summary(reg2_3ints_3)
+
+# Hence, we recommended that the specific contrasts of interest are entered 
+# directly.
+
+# It is of interest to see what R does if factor I is only included as a fixed 
+# effect and the  order of the random effects is varied. See below.    
+
+aov2a_3ints<-aov(y~I+Error(T*B+I:T+I:B+I:T:B), contrasts=list(I=contr.sum),
+                 data=CrossedDataset2_3Ints)
+summary(aov2a_3ints)
+
+aov2b_3ints<-aov(y~I+Error(T+B+I:B+I:T:B+T:B+I:T),contrasts=list(I=contr.sum),
+                 data=CrossedDataset2_3Ints)
+summary(aov2b_3ints)
+
+# Note: the output here shows that the fixed effect of factor I incorrectly appears
+# in the W_I∧T or W_I∧C stratum, depending on whether I:T or I:C appears in the 
+# random part of the model statement first, respectively.
+```
+
+## **3. Multicentre Randomised Block Factorial Design**
+
+### a) Case One - Two Interventions Only
+
+```{r}
+
+CrossedDataset3 <- readRDS("C:/Datasets/CrossedDataset3.rds")
+
+# ANOVA
+
+aov3 <- aov(y~I+Error(B+I+C+T+I:B+C:B+T:B+I:C+I:T+I:C:B+I:T:B), 
+            contrasts=list(I=contr.sum), data=CrossedDataset3)
+summary(aov3)
+coefficients(aov3)
+print(model.tables(aov3,"means"))
+
+# Note: the order of the terms in the error part of the model is important. If 
+# Error(I+T+C+B+I:T+I:C+I:B+T:B+C:B+I:C:B+I:T:B) is used, not all of the terms 
+# will appear in the output. The fixed effect of I appears in the W_I stratum, 
+# where there are no residual degrees of freedom. It can be seen that estimates of
+# ξ_B, ξ_C, ξ_T, ξ_I∧B, ξ_C∧B, ξ_T∧B, ξ_I∧C, ξ_I∧T, ξ_I∧C∧B, ξ_I∧T∧B and ξ_E are  
+# 108.4, 128.3, 13.94, 12.2, 13.63, 3.898, 19.98, 6.878, 6.976, 3.638 and 2.971 
+# respectively. As such, the estimate of ξ_I is 19.98+12.2-6.976=25.204 so the 
+# approximate F is 192.1/25.204=7.6218. Using Equation (2), denominator degrees of 
+# freedom for this F test are 5.3166. The p-value can be found using 
+
+pf(7.62180606252, 1, 5.316572016, lower.tail=F)
+
+# Note that estimates of δ_0=47.4406 and δ_1=-0.4473807. Finally, note that 
+# -0.4473807 is half the difference between the mean of all outcomes on level 1 of
+# factor I (46.99) and the mean of all outcomes on level 2 of factor I (47.89).
+
+# For the random effect of factor T, F = 13.94/7.138 = 1.952927991 on 42 and 
+# 39.32690436 degrees of freedom, so the p-value is
+
+pf(1.952927991, 42, 39.32690436, lower.tail=F)
+
+# For the random effect of factor C, F = 128.3/33.436 = 3.837181481 on 5 and 
+# 11.46814402 degrees of freedom, so the p-value is
+
+pf(3.837181481, 5, 11.46814402, lower.tail=F)
+
+# For the random effect of factor B, F = 108.4/18.854 = 5.749443089 on 4 and 
+# 7.264628053 degrees of freedom, so the p-value is
+
+pf(5.749443089, 4, 7.264628053, lower.tail=F)
+
+# For the random effect of factor I∧C, F = 19.98/10.216 = 1.955755677 on 5 and 
+# 28.68605702 degrees of freedom, so the p-value is
+
+pf(1.955755677, 5, 28.68505702, lower.tail=F)
+
+# For the random effect of factor C∧B, F = 13.63/7.236 = 1.883637369 on 20 and 
+# 20.11937278 degrees of freedom, so the p-value is
+
+pf(1.883637369, 20, 20.11937278, lower.tail=F)
+
+# For the random effect of factor I∧T, F = 6.878/3.638 = 1.89058823 on 42 and 168 
+# degrees of freedom, so the p-value is
+
+pf(1.89059923, 42, 168, lower.tail=F)
+
+# For the random effect of factor I∧B, F = 12.2/6.976 = 1.748853211 on 4 and 20 
+# degrees of freedom, so the p-value is
+
+pf(1.748853211, 4, 20, lower.tail=F)
+
+# For the random effect of factor T∧B, F = 3.898/3.638 = 1.072467839 on 168 and 168
+# degrees of freedom, so the p-value is
+
+pf(1.072467839, 168, 168, lower.tail=F)
+
+# For the random effect of factor I∧C∧B, F = 6.976/3.638 = 1.917537108 on 20 and 
+# 168 degrees of freedom, so the p-value is
+
+pf(1.917537108, 20, 168, lower.tail=F)
+
+# For the random effect of factor I∧T∧B, F = 3.638/2.971 = 1.224503534 on 168 and 
+# 480 degrees of freedom, so the p-value is
+
+pf(1.224503534, 168, 480, lower.tail=F)
+
+# Regression
+
+library(lmerTest)
+reg3 <- lmer(y~I+(1|T)+(1|B)+(1|T:B)+(1|C)+(1|C:B)+(1|I:T)+(1|I:B)+(1|I:T:B)
+             +(1|I:C)+(1|I:C:B), contrasts=list(I=contr.sum), data=CrossedDataset3)
+summary(reg3)
+ls_means(reg3, which = "I", pairwise = TRUE)
+ranova(reg3)
+
+# Note: this analysis should be done with the lmer command here. Satterthwaite 
+# degrees of freedom for the fixed effect of I are 5.3 as expected. Note that 
+# t=-2.7606 (=sqrt(7.622)) and p=0.03727 as before. It can be seen that estimates 
+# of σ_v1^2, σ_v2^2, σ_v3^2, σ_v4^2, σ_v5^2, σ_u1^2, σ_u2^2, σ_u3^2, σ_u4^2, σ_u5^2
+# and σ_e^2 are 0.32402, 0.05444, 0.33310, 0.12211, 0.20867, 0.34001, 0.46652, 
+# 0.06500, 0.59267, 0.19972 and 2.97150 respectively. Using Equations (E.10) to 
+# (E.20), these give estimates of ξ_T, ξ_C, ξ_B, ξ_I∧T, ξ_I∧C, ξ_I∧B, ξ_T∧B, ξ_C∧B,
+# ξ_I∧C∧B, ξ_I∧T∧B and ξ_E above precisely. As before, it can be seen that estimates
+# of δ_0=47.4406 and δ_1=-0.4474, and that -0.4474 is half the difference between 
+# the means of all outcomes on levels 1 and 2 of factor I, given as -0.89476. Note 
+# that the standard error of the estimate of δ_0 is 0.1621 which is also half 
+# 0.32411.
+
+# It is of interest to see what R does if factor I is only included as a fixed 
+# effect and the  order of the random effects is varied. See below.  
+
+aov3a<-aov(y~I+Error(B+C+T+I:B+C:B+T:B+I:C+I:T+I:C:B+I:T:B),
+           contrasts=list(I=contr.sum),data= CrossedDataset3)
+summary(aov3a)
+
+aov3b<-aov(y~I+Error(B+C+T+C:B+T:B+I:C+I:T+I:B+I:C:B+I:T:B),
+           contrasts=list(I=contr.sum),data=CrossedDataset3)
+summary(aov3b)
+
+aov3c<-aov(y~I+Error(B+C+T+C:B+T:B+I:T+I:C+I:C:B+I:T:B+I:B),
+           contrasts=list(I=contr.sum),data=CrossedDataset3)
+summary(aov3c)
+
+# Note that the output here shows that the fixed effect of I incorrectly appears in
+# the W_I∧T, W_I∧B or W_I∧C stratum, depending on whether I:T, I:B or I:C appears in
+# the random part of the model statement first, respectively. Note also that when 
+# I:C appears later in the random part of the model statement, it is not included 
+# in the output.
+```
+
+### b) Case Two - Three Interventions
+
+```{r}
+
+CrossedDataset3_3Ints <- readRDS("C:/Datasets/CrossedDataset3_3Ints.rds")
+
+# ANOVA
+
+aov3_3ints_1<-aov(y~I+Error(B+I+C+T+I:B+C:B+T:B+I:C+I:T+I:C:B+I:T:B),
+                  contrasts=list(I=contr.sum),data=CrossedDataset3_3Ints)
+summary(aov3_3ints_1)
+print(model.tables(aov3_3ints_1,"means"))
+
+# Note: the fixed effect of I appears in the W_I stratum, where there are no 
+# residual degrees of freedom. It can be seen that estimates of ξ_B, ξ_C, ξ_T, 
+# ξ_I∧B, ξ_C∧B, ξ_T∧B, ξ_I∧C, ξ_I∧T, ξ_I∧C∧B, ξ_I∧T∧B and ξ_E are 100.5, 4.13, 3.15,
+# 56.53, 14.54, 3.585, 16.51, 3.281, 3.119, 2.777 and 2.605 respectively. As such, 
+# the estimate of ξ_I is 16.51+56.53-3.119=69.921 so the approximate F is 
+# 51.75/69.921=0.7401. Using Equation (2), denominator degrees of freedom for this F
+# test are 11.4507. The p-value can be found using 
+
+pf(0.740120994, 2, 11.45069399, lower.tail=F)
+
+# For the random effect of factor T, F = 3.15/4.089 = 0.770359501 on 42 and 
+# 73.45953981 degrees of freedom, so the p-value is
+
+pf(0.770359501, 42, 73.45953981, lower.tail=F)
+
+# For the random effect of factor C, F = 4.13/26.992 = 0.153008299 on 5 and 
+# 18.90633843 degrees of freedom, so the p-value is
+
+pf(0.153008299, 5, 18.90633843, lower.tail=F)
+
+# For the random effect of factor B, F = 100.5/67.951 = 1.479006931 on 4 and 
+# 11.25441982 degrees of freedom, so the p-value is
+
+pf(1.479006931, 4, 11.25441982, lower.tail=F)
+
+# For the random effect of factor I∧C, F = 16.51/3.623 = 4.556996964 on 10 and 
+# 33.28886518 degrees of freedom, so the p-value is
+
+pf(4.556996964, 10, 33.28886518, lower.tail=F)
+
+# For the random effect of factor C∧B, F = 14.54/3.927 = 3.702571938 on 20 and 
+# 45.00515606 degrees of freedom, so the p-value is
+
+pf(3.702571938, 20, 45.00515606, lower.tail=F)
+
+# For the random effect of factor I∧T, F = 3.281/2.777 = 1.181490817 on 84 and 336 
+# degrees of freedom, so the p-value is
+
+pf(1.181490817, 84, 336, lower.tail=F)
+
+# For the random effect of factor I∧B, F = 56.53/3.119 = 18.12439885 on 8 and 40 
+# degrees of freedom, so the p-value is
+
+pf(18.12439885, 8, 40, lower.tail=F)
+
+# For the random effect of factor T∧B, F = 3.585/2.777 = 1.290961469 on 168 and 336
+# degrees of freedom, so the p-value is
+
+pf(1.290961469, 168, 336, lower.tail=F)
+
+# For the random effect of factor I∧C∧B, F = 3.119/2.777 = 1.123154483 on 40 and 
+# 336 degrees of freedom, so the p-value is
+
+pf(1.123154483, 40, 336, lower.tail=F)
+
+# For the random effect of factor I∧T∧B, F = 2.777/2.605 = 1.066026871 on 336 and 
+# 720 degrees of freedom, so the p-value is
+
+pf(1.066026871, 336, 720, lower.tail=F)
+
+# Note that no specific contrasts are given in the output. The coefficients command
+# does not give the orthogonal contrasts of interest so are not provided here. 
+
+# It may be desirable to fit specific contrasts of interest – first contrast1 and contrast2
+
+aov3_3ints_2<-aov(y~contrast1+contrast2+Error(B+I+C+T+I:B+C:B+T:B+I:C+I:T+I:C:B
+                                              +I:T:B),data=CrossedDataset3_3Ints)
+summary(aov3_3ints_2)
+
+# Then contrast2 and contrast3
+
+aov3_3ints_3<-aov(y~contrast2+contrast3+Error(B+I+C+T+I:B+C:B+T:B+I:C+I:T+I:C:B
+                                              +I:T:B),data=CrossedDataset3_3Ints)
+summary(aov3_3ints_3)
+
+# Note whether contrast1 or contrast3 is included makes no difference in the ANOVA 
+# model. The sums of squares for the two orthogonal contrasts (i.e., 65.66 and 
+# 37.85) add up to the sum of squares for the overall effect of factor I (i.e., 
+# 103.51).
+
+# For the fixed effect of contrast1, F = 65.66/69.921 = 0.93905979605 on 1 and 
+# 11.45069399 degrees of freedom, so the p-value is
+
+pf(0.93905979605, 1, 11.45069399, lower.tail=F)
+
+# For the fixed effect of contrast2, F = 37.85/69.921 = 0.54132520987 on 1 and 
+# 11.45069399 degrees of freedom, so the p-value is
+
+pf(0.54132520987, 1, 11.45069399, lower.tail=F)
+
+#Regression – first contrast1 and contrast2
+
+library(lmerTest)
+reg3_3ints_1<-lmer(y~contrast1+contrast2+(1|T)+(1|B)+(1|T:B)+(1|C)+(1|C:B)
+                   +(1|I:T)+(1|I:B)+(1|I:T:B)+(1|I:C)+(1|I:C:B),
+                   data=CrossedDataset3_3Ints)
+summary(reg3_3ints_1)
+ranova(reg3_3ints_1)
+
+# Note: this analysis should be done with the lmer command used here. Satterthwaite
+# degrees of freedom for the fixed effect of I are 10.7830 rather than 11.4507 as 
+# expected. For contrast1 t=-0.992 ≠ sqrt(0.93905979605) and p=0.343 rather than 
+# 0.3525433. For contrast2 t=0.753 ≠ sqrt(0.54132520987) and p=0.753 rather than 
+# 0.4766853.
+
+# We then fit the regression model using contrast2 and contrast3
+
+reg3_3ints_2<-lmer(y~contrast2+contrast3+(1|T)+(1|B)+(1|T:B)+(1|C)+(1|C:B)
+                   +(1|I:T)+(1|I:B)+(1|I:T:B)+(1|I:C)+(1|I:C:B),
+                   data=CrossedDataset3_3Ints)
+summary(reg3_3ints_2)
+
+# Note: the estimates of σ_v1^2, σ_v2^2, σ_v3^2, σ_v4^2, σ_v5^2, σ_u1^2, σ_u2^2,
+# σ_u3^2, σ_u4^2, σ_u5^2 and σ_e^2 are unstable, changing depending on whether 
+# contrast1 or contrast3 is included in the model. They also do not give ξ_T, ξ_C,
+# ξ_B, ξ_I∧T, ξ_I∧C, ξ_I∧B, ξ_T∧B, ξ_C∧B, ξ_I∧C∧B, ξ_I∧T∧B and ξ_E above using 
+# Equations (E.10) to (E.20). The reason for this is the presence of some variance 
+# components estimated to be zero. Under these circumstances, we would argue that 
+# ANOVA is preferable to regression.
+
+# It is of interest to see what R does if factor I is only included as a fixed 
+# effect and the order of the random effects is varied. See below.    
+
+aov3a_3ints<-aov(y~I+Error(B+C+T+I:B+C:B+T:B+I:C+I:T+I:C:B+I:T:B),
+                 data=CrossedDataset3_3Ints)
+summary(aov3a_3ints)
+
+aov3b_3ints<-aov(y~I+Error(B+C+T+C:B+T:B+I:C+I:T+I:B+I:C:B+I:T:B),
+                 data=CrossedDataset3_3Ints)
+summary(aov3b_3ints)
+
+aov3c_3ints<-aov(y~I+Error(B+C+T+C:B+T:B+I:T+I:C+I:C:B+I:T:B+I:B),
+                 data=CrossedDataset3_3Ints)
+summary(aov3c_3ints)
+
+# Note that the output here shows that the fixed effect of I incorrectly appears in
+# the W_I∧T, W_I∧B or W_I∧C stratum, depending on whether I:T, I:B or I:C appears in
+# the random part of the model statement first, respectively. Note also that when 
+# I:C appears later in the random part of the model statement, it is not included 
+# in the output.
+```
